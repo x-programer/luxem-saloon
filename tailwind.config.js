@@ -1,6 +1,5 @@
-import type { Config } from "tailwindcss";
-
-const config: Config = {
+/** @type {import('tailwindcss').Config} */
+module.exports = {
     content: [
         "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
         "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -11,6 +10,14 @@ const config: Config = {
             colors: {
                 background: "var(--background)",
                 foreground: "var(--foreground)",
+                card: {
+                    DEFAULT: "#FFFFFF",
+                    foreground: "#171717",
+                },
+                popover: {
+                    DEFAULT: "#FFFFFF",
+                    foreground: "#171717",
+                },
                 primary: {
                     DEFAULT: "#8B5CF6", // Soft Vivid Violet
                     foreground: "#FFFFFF",
@@ -19,6 +26,21 @@ const config: Config = {
                     DEFAULT: "#F3F0FF", // Very Pale Lavender
                     foreground: "#2E1065",
                 },
+                muted: {
+                    DEFAULT: "#F3F0FF",
+                    foreground: "#6D28D9",
+                },
+                accent: {
+                    DEFAULT: "#F3F0FF",
+                    foreground: "#2E1065",
+                },
+                destructive: {
+                    DEFAULT: "#EF4444",
+                    foreground: "#FFFFFF",
+                },
+                border: "#E5E7EB",
+                input: "#E5E7EB",
+                ring: "#8B5CF6",
                 surface: "#FFFFFF",
                 textMain: "#2E1065", // Deep Dark Violet
                 textMuted: "#6D28D9", // Muted Purple
@@ -40,4 +62,3 @@ const config: Config = {
     },
     plugins: [],
 };
-export default config;

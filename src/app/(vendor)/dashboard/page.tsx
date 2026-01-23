@@ -7,6 +7,9 @@ import { useEffect, useState } from "react";
 import { Edit2, TrendingUp, Users, Calendar, ArrowUpRight, Clock, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { AppointmentManager } from "@/components/dashboard/AppointmentManager";
+import { AnalyticsSection } from "@/components/dashboard/AnalyticsSection";
+import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 
 export default function DashboardPage() {
     const { user } = useAuth();
@@ -35,7 +38,7 @@ export default function DashboardPage() {
         ocean: { bg: "from-blue-600 to-blue-800", text: "text-blue-600" },
     }[theme as "royal" | "midnight" | "ocean"] || { bg: "from-[#6F2DBD] to-[#4c1d85]", text: "text-[#6F2DBD]" };
 
-    if (loading) return <div className="p-8">Loading...</div>;
+    if (loading) return <DashboardSkeleton />;
 
     const salonName = salonData?.salonName || "Luxe Salon";
     const tagline = salonData?.tagline || "Your Premium Beauty Destination";
@@ -66,8 +69,11 @@ export default function DashboardPage() {
                     {/* Logo Circle */}
                     <div className="w-24 h-24 rounded-full bg-white p-1.5 shadow-xl glassmorphism-ring shrink-0">
                         <div className="w-full h-full bg-gray-100 rounded-full flex items-center justify-center text-2xl font-bold text-gray-400 overflow-hidden relative">
-                            {/* Show First Letter if no logo */}
-                            {salonName.charAt(0)}
+                            {salonData?.logo ? (
+                                <img src={salonData.logo} alt="Logo" className="w-full h-full object-cover" />
+                            ) : (
+                                salonName.charAt(0)
+                            )}
                         </div>
                     </div>
 
@@ -154,44 +160,40 @@ export default function DashboardPage() {
                 </motion.div>
             </div>
 
-            {/* 3. Recent Activity */}
+            {/* 2.5 Analytics Section */}
+            <AnalyticsSection theme={theme} />
+
+            {/* 3. Your Service Menu */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.35 }}
+                className="bg-white rounded-3xl shadow-soft border border-gray-100 overflow-hidden relative z-0 mb-8"
+            >
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-gray-900">Your Service Menu</h3>
+                    <Link href="/dashboard/services" className={`text-sm font-semibold ${themeColors.text} hover:opacity-80`}>Manage All</Link>
+                </div>
+
+                {/* We'll implement a proper fetch here next, for now a placeholder/link */}
+                <div className="p-8 text-center bg-gray-50/50">
+                    <p className="text-gray-500 text-sm mb-4">Manage your services efficiently.</p>
+                    <Link
+                        href="/dashboard/services"
+                        className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-xl text-sm font-bold text-gray-700 border border-gray-200 shadow-sm hover:shadow-md transition-all"
+                    >
+                        View Services <ArrowUpRight className="w-4 h-4" />
+                    </Link>
+                </div>
+            </motion.div>
+
+            {/* 4. Recent Activity -> Appointment Manager */}
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
-                className="bg-white rounded-3xl shadow-soft border border-gray-100 overflow-hidden relative z-0"
             >
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                    <h3 className="text-lg font-bold text-gray-900">Recent Appointments</h3>
-                    <button className={`text-sm font-semibold ${themeColors.text} hover:opacity-80`}>View All</button>
-                </div>
-                <div className="divide-y divide-gray-50">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                        <div key={i} className="p-6 flex items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer group">
-                            <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-500 group-hover:bg-white group-hover:shadow-sm transition-all">
-                                    JD
-                                </div>
-                                <div>
-                                    <p className="text-sm font-bold text-gray-900">Jane Doe</p>
-                                    <p className="text-xs text-gray-500">Haircut & Styling • 2h</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-6">
-                                <div className="text-right hidden sm:block">
-                                    <div className="flex items-center gap-1 text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded-md">
-                                        <Clock className="w-3 h-3" />
-                                        10:00 AM
-                                    </div>
-                                </div>
-                                <div className={`font-bold text-sm ${themeColors.text}`}>$120.00</div>
-                                <button className="text-gray-400 hover:text-gray-600">
-                                    <MoreHorizontal className="w-5 h-5" />
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                <AppointmentManager />
             </motion.div>
         </div>
     );

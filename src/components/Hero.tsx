@@ -2,126 +2,157 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { ArrowRight, Bell } from "lucide-react";
+import { ArrowRight, Bell, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { SearchForm } from "./shared/SearchForm";
 
 export function Hero() {
     return (
-        <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden bg-gradient-to-b from-secondary to-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-                <div className="lg:grid lg:grid-cols-12 lg:gap-16 items-center">
+        <section className="relative pt-40 pb-20 lg:pt-48 lg:pb-32 overflow-hidden px-4">
 
-                    {/* Text Content */}
-                    <div className="lg:col-span-6 text-center lg:text-left mb-12 lg:mb-0">
-                        <motion.h1
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.6 }}
-                            className="text-4xl sm:text-5xl lg:text-6xl font-bold text-textMain leading-tight mb-6"
-                        >
-                            The Operating System for <span className="text-primary">Modern Salons</span>.
-                        </motion.h1>
+            <div className="max-w-7xl mx-auto relative z-10">
+                {/* Massive Hero Glass Card */}
+                <motion.div
+                    initial={{ opacity: 0, y: 40 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                    className="relative bg-white/20 backdrop-blur-2xl border border-white/40 shadow-[0_20px_50px_rgba(8,_112,_184,_0.05)] rounded-[3rem] p-8 md:p-12 lg:p-16 overflow-hidden max-w-6xl mx-auto"
+                >
+                    {/* Glass Reflection/Highlight */}
+                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-50" />
 
-                        <motion.p
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.6, delay: 0.1 }}
-                            className="text-lg text-textMuted mb-8 leading-relaxed max-w-2xl mx-auto lg:mx-0"
-                        >
-                            Manage bookings, showcase your portfolio, and grow your brand with a stunning profile.
-                            Built for beauty professionals who demand excellence.
-                        </motion.p>
+                    <div className="lg:grid lg:grid-cols-12 lg:gap-16 items-center">
 
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.6, delay: 0.2 }}
-                            className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4"
-                        >
-                            <Link
-                                href="/signup"
-                                className="w-full sm:w-auto px-8 py-4 bg-primary text-white rounded-full font-semibold shadow-soft hover:shadow-glow hover:bg-violet-600 transition-all flex items-center justify-center gap-2"
+                        {/* Text Content */}
+                        <div className="lg:col-span-6 text-center lg:text-left mb-12 lg:mb-0 relative z-20">
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.2 }}
+                                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/30 border border-white/30 backdrop-blur-sm text-xs font-bold text-primary mb-6 shadow-sm"
                             >
-                                Start Free Trial <ArrowRight className="w-4 h-4" />
-                            </Link>
-                            <Link
-                                href="#demo"
-                                className="w-full sm:w-auto px-8 py-4 bg-transparent border-2 border-primary/20 text-primary rounded-full font-semibold hover:bg-primary/5 transition-all flex items-center justify-center"
-                            >
-                                View Demo
-                            </Link>
-                        </motion.div>
-                    </div>
+                                <Sparkles size={12} className="fill-primary" />
+                                <span>v2.0 Now Available</span>
+                            </motion.div>
 
-                    {/* Visual Content (Glassmorphism Card) */}
-                    <div className="lg:col-span-6 relative">
+                            <motion.h1
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.6, delay: 0.3 }}
+                                className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-textMain leading-[1.1] mb-6 drop-shadow-sm"
+                            >
+                                The OS for <br />
+                                <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-luxe-secondary">
+                                    Modern Salons
+                                </span>
+                            </motion.h1>
+
+                            <motion.p
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.6, delay: 0.4 }}
+                                className="text-xl text-textMuted/90 mb-10 leading-relaxed max-w-lg mx-auto lg:mx-0 font-medium"
+                            >
+                                Manage bookings, showcase your portfolio, and grow your brand.
+                                Designed for those who appreciate <span className="text-textMain font-semibold">imperceptible design</span>.
+                            </motion.p>
+
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.6, delay: 0.5 }}
+                                className="w-full max-w-xl mx-auto lg:mx-0"
+                            >
+                                <SearchForm variant="hero" />
+
+                                <div className="mt-8 flex items-center justify-center lg:justify-start gap-4 text-xs font-semibold text-textMuted uppercase tracking-wider">
+                                    <div className="flex -space-x-2">
+                                        {[1, 2, 3, 4].map((i) => (
+                                            <div key={i} className={`w-8 h-8 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center overflow-hidden`}>
+                                                <img src={`https://i.pravatar.cc/100?img=${i + 10}`} alt="User" className="w-full h-full object-cover" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p>Trusted by <span className="text-textMain font-bold">500+ Salons</span></p>
+                                </div>
+                            </motion.div>
+                        </div>
+
+                        {/* Visual Content (Glassmorphism Inner Card) */}
                         <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
+                            initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.8, delay: 0.3 }}
-                            className="relative mx-auto max-w-sm lg:max-w-md w-full"
+                            transition={{ duration: 0.8, delay: 0.6 }}
+                            className="lg:col-span-6 relative perspective-1000"
                         >
-                            {/* Background Blob */}
-                            <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-primary/20 rounded-full blur-3xl opacity-50 animate-pulse"></div>
+                            {/* Floating Elements Animation Container */}
+                            <motion.div
+                                animate={{ y: [0, -15, 0] }}
+                                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                            >
+                                {/* Inner App Glass Card */}
+                                <div className="relative bg-white/40 backdrop-blur-3xl border border-white/50 rounded-[2.5rem] p-6 shadow-2xl ring-1 ring-white/40">
 
-                            {/* Glass Card */}
-                            <div className="relative bg-white/60 backdrop-blur-xl border border-white/40 rounded-3xl p-6 shadow-2xl">
-                                {/* Header of fake app */}
-                                <div className="flex items-center justify-between mb-6">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center text-primary font-bold">LS</div>
-                                        <div>
-                                            <h3 className="font-semibold text-textMain">Luxe Salon</h3>
-                                            <p className="text-xs text-textMuted">Admin Dashboard</p>
+                                    {/* Header */}
+                                    <div className="flex items-center justify-between mb-8 pb-6 border-b border-black/5">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-luxe-secondary flex items-center justify-center text-white font-bold text-lg shadow-lg">LS</div>
+                                            <div>
+                                                <h3 className="font-bold text-lg text-textMain">Luxe Salon</h3>
+                                                <p className="text-xs font-semibold text-textMuted uppercase tracking-wide">Dashboard</p>
+                                            </div>
+                                        </div>
+                                        <div className="w-10 h-10 rounded-full bg-white/50 flex items-center justify-center border border-white/50">
+                                            <Bell className="w-5 h-5 text-textMain" />
                                         </div>
                                     </div>
-                                    <div className="relative">
-                                        <Bell className="w-5 h-5 text-textMuted" />
-                                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+
+                                    {/* Content Mockups */}
+                                    <div className="space-y-4">
+                                        {/* Item 1 */}
+                                        <div className="bg-white/60 p-4 rounded-3xl border border-white/60 flex items-center gap-4 shadow-sm">
+                                            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold">S</div>
+                                            <div className="flex-1">
+                                                <p className="text-sm font-bold text-textMain">Sarah Johnson</p>
+                                                <p className="text-xs text-textMuted">Haircut & Styling • 2:00 PM</p>
+                                            </div>
+                                            <span className="px-3 py-1 bg-green-100/50 text-green-700 text-xs font-bold rounded-full border border-green-100">Confirmed</span>
+                                        </div>
+
+                                        {/* Item 2 */}
+                                        <div className="bg-white/40 p-4 rounded-3xl border border-white/40 flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold">M</div>
+                                            <div className="flex-1">
+                                                <p className="text-sm font-bold text-textMain">Mike Chen</p>
+                                                <p className="text-xs text-textMuted">Consultation • 3:30 PM</p>
+                                            </div>
+                                            <span className="px-3 py-1 bg-blue-100/50 text-blue-600 text-xs font-bold rounded-full border border-blue-100">Pending</span>
+                                        </div>
+
+                                        {/* Stat Card */}
+                                        <div className="mt-6 p-5 rounded-3xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10">
+                                            <p className="text-sm font-semibold text-textMuted mb-1">Total Revenue</p>
+                                            <div className="flex items-end justify-between">
+                                                <p className="text-3xl font-bold text-textMain tracking-tight">$3,420</p>
+                                                <div className="h-8 w-24 bg-primary/20 rounded-md"></div>
+                                            </div>
+                                        </div>
                                     </div>
+
+                                    {/* Floating Popout */}
+                                    <div className="absolute -right-8 top-20 bg-white/90 backdrop-blur-xl p-4 rounded-2xl shadow-xl border border-white/60 animate-bounce duration-[3000ms]">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                                            <p className="text-xs font-bold text-textMain">Syncd with Google Cal</p>
+                                        </div>
+                                    </div>
+
                                 </div>
-
-                                {/* Notifications Mockup */}
-                                <div className="space-y-4">
-                                    <div className="bg-white/80 p-4 rounded-2xl shadow-sm border border-white/50 flex items-start gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-xs font-bold">S</div>
-                                        <div>
-                                            <p className="text-sm font-medium text-textMain">New Booking Confirmed</p>
-                                            <p className="text-xs text-textMuted mt-0.5">Sarah J. for Haircut & Style • 2:00 PM</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-white/80 p-4 rounded-2xl shadow-sm border border-white/50 flex items-start gap-3 opacity-90">
-                                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-bold">M</div>
-                                        <div>
-                                            <p className="text-sm font-medium text-textMain">New Review Received</p>
-                                            <p className="text-xs text-textMuted mt-0.5">"Absolutely loved the service! Best in town."</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 flex items-center gap-3">
-                                        <div>
-                                            <p className="text-sm font-medium text-textMain">Daily Revenue</p>
-                                            <p className="text-2xl font-bold text-primary mt-1">$1,240.00</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Floating "New" badge */}
-                                <div className="absolute -bottom-6 -left-6 bg-white p-3 rounded-2xl shadow-lg flex items-center gap-3 animate-bounce duration-[2000ms]">
-                                    <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center text-primary">
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-bold text-textMain">Just now</p>
-                                        <p className="text-xs text-textMuted">Booking sync active</p>
-                                    </div>
-                                </div>
-
-                            </div>
+                            </motion.div>
                         </motion.div>
-                    </div>
 
-                </div>
+                    </div>
+                </motion.div>
             </div>
         </section>
     );

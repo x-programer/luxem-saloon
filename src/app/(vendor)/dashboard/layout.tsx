@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Sidebar } from "@/components/dashboard/Sidebar";
-import { Menu, Bell, Search } from "lucide-react";
+import { Notifications } from "@/components/dashboard/Notifications";
+import { Menu, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function VendorDashboardLayout({
@@ -53,10 +54,7 @@ export default function VendorDashboardLayout({
                         />
                     </div>
                     <div className="flex items-center gap-4">
-                        <button className="relative p-2.5 bg-white rounded-full text-gray-500 hover:text-[#6F2DBD] hover:bg-purple-50 transition-all shadow-sm ring-1 ring-gray-100">
-                            <Bell size={20} />
-                            <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-                        </button>
+                        <Notifications />
                     </div>
                 </header>
 
