@@ -13,6 +13,7 @@ export interface Booking {
     time: string;
     status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'declined';
     createdAt: Timestamp;
+    services?: any[];
 }
 
 export function useCustomerBookings(userId: string | undefined) {

@@ -119,22 +119,6 @@ const SidebarNavContent = ({
                     const isActive = item.href === '/dashboard'
                         ? pathname === '/dashboard'
                         : pathname.startsWith(item.href) && item.href !== '/dashboard' ? true : pathname === item.href;
-                    // Fix active logic: exact match for dashboard, dashboard/bookings?view=calendar logic might fail startsWith check if not careful
-                    // Actually, pathname ignores query params. so '/dashboard/bookings' matches '/dashboard/bookings?view=calendar'
-
-                    // Let's refine the active check for query params if needed, but pathname usually doesn't include query.
-                    // If href has query, we might need to check searchParams? 
-                    // For now, let's stick to standard path check. 'Calendar' has href with query, but pathname will just be /dashboard/bookings.
-                    // So both Bookings and Calendar will light up? 
-                    // Yes, they point to the same page.
-                    // We should maybe refine this using useSearchParams.
-
-                    // We can check router query? But we are in a purely client component props structure here.
-                    // We passed pathname. We didn't pass searchParams.
-                    // For now, let's leave it as is. It's acceptable if they both highlight or just bookings highlights.
-                    // Wait, if I click Calendar, pathname is /dashboard/bookings. Bookings link will be active too.
-                    // This is a bit weird UI. Ideally 'Calendar' link should be active only when view=calendar.
-                    // I will add searchParams check in the main component and pass 'isActive' prop? No, loop is here.
 
                     return (
                         <Link
@@ -244,6 +228,28 @@ export function Sidebar({ className, isMobileOpen, onMobileClose }: { className?
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [slug, setSlug] = useState<string | null>(null);
 
+    // Sidebar Integration API Calls
+    useEffect(() => {
+        // Desktop sidebar width: 288px (w-72)
+        // Collapsed width: 80px (w-20)
+        const width = isCollapsed ? 80 : 288;
+
+        if (typeof window !== 'undefined' && (window as any).DashboardLayout) {
+            // Notify layout of current state
+            const layout = (window as any).DashboardLayout;
+
+            // If we have specific open/close hooks, use them
+            if (layout.onSidebarOpen) {
+                layout.onSidebarOpen(width);
+            }
+
+            // Also call resize if available as a catch-all
+            if (layout.onResize) {
+                layout.onResize(!isCollapsed, width);
+            }
+        }
+    }, [isCollapsed]);
+
     useEffect(() => {
         const fetchSlug = async () => {
             if (!user) return;
@@ -312,8 +318,8 @@ export function Sidebar({ className, isMobileOpen, onMobileClose }: { className?
 
             {/* Desktop Collapsible Sidebar */}
             <motion.div
-                initial={{ width: 256 }}
-                animate={{ width: isCollapsed ? 80 : 256 }}
+                initial={{ width: 288 }}
+                animate={{ width: isCollapsed ? 80 : 288 }}
                 transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
                 className={cn(
                     "hidden md:flex relative flex-col h-full bg-white border-r border-gray-100 shadow-xl z-20",

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ThemeWrapper } from "@/components/theme/ThemeWrapper";
-import { Calendar, Clock, MapPin, Star, Share2, X, ShoppingBag, Instagram, Facebook, Globe, Youtube, Twitter, Quote } from "lucide-react";
+import { Calendar, Clock, MapPin, Star, Share2, X, ShoppingBag, Instagram, Facebook, Globe, Youtube, Twitter, Quote, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BookingModal } from "./BookingModal";
 import { ReviewList } from "@/components/public/ReviewList";
@@ -34,6 +34,7 @@ interface VendorData {
     products?: any[];
     schedule: any;
     isBookingEnabled: boolean;
+    platformStatus?: 'active' | 'shadow_banned' | 'suspended' | 'pending_verification';
     externalLinks?: {
         id: string;
         platform: "instagram" | "facebook" | "twitter" | "youtube" | "website" | "shop";
@@ -43,13 +44,47 @@ interface VendorData {
 }
 
 export default function PublicProfileClient({ vendor }: { vendor: VendorData }) {
-    const [selectedService, setSelectedService] = useState<Service | undefined>(undefined);
+    const [cart, setCart] = useState<Service[]>([]); // 👈 Multi-service cart
     const [isBookingOpen, setIsBookingOpen] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-    const handleBookClick = (service?: Service) => {
+    // Toggle service in cart
+    const toggleService = (service: Service) => {
         if (!vendor.isBookingEnabled) return;
-        setSelectedService(service);
+
+        setCart(prev => {
+            const exists = prev.find(s => s.id === service.id);
+            if (exists) {
+                return prev.filter(s => s.id !== service.id);
+            }
+            return [...prev, service];
+        });
+    };
+
+    // Open booking modal with cart
+    const handleBookBundle = () => {
+        if (cart.length === 0) return;
+        setIsBookingOpen(true);
+    };
+
+    // Shortcut for direct booking (optional, can just add to cart and open)
+    const handleBookClick = (service?: Service) => {
+        if (!service) {
+            // Handle generic "Book Appointment" button from sidebar
+            if (cart.length > 0) {
+                setIsBookingOpen(true);
+            } else {
+                // Maybe scroll to services?
+                const serviceSection = document.getElementById("services-section");
+                serviceSection?.scrollIntoView({ behavior: "smooth" });
+            }
+            return;
+        }
+
+        // Check if already in cart
+        if (!cart.find(s => s.id === service.id)) {
+            setCart(prev => [...prev, service]);
+        }
         setIsBookingOpen(true);
     };
 
@@ -127,10 +162,15 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
                                     <span className="flex items-center bg-black/40 backdrop-blur-sm px-3 py-1 rounded-lg border border-white/5">
                                         <MapPin className="w-4 h-4 mr-2" /> {vendor.address}
                                     </span>
-                                    {vendor.isBookingEnabled ? (
+                                    {vendor.isBookingEnabled && vendor.platformStatus !== 'shadow_banned' ? (
                                         <span className="flex items-center text-green-400 bg-green-950/40 backdrop-blur-sm px-3 py-1 rounded-lg border border-green-500/20">
                                             <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse" />
                                             Bookings Available
+                                        </span>
+                                    ) : vendor.platformStatus === 'shadow_banned' ? (
+                                        <span className="flex items-center text-yellow-400 bg-yellow-950/40 backdrop-blur-sm px-3 py-1 rounded-lg border border-yellow-500/20" title="Online booking is temporarily disabled for this vendor.">
+                                            <div className="w-2 h-2 bg-yellow-500 rounded-full mr-2" />
+                                            Booking Disabled
                                         </span>
                                     ) : (
                                         <span className="flex items-center text-gray-400 bg-gray-900/60 backdrop-blur-sm px-3 py-1 rounded-lg border border-white/10">
@@ -215,51 +255,113 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
                                             <p className="text-gray-500 italic">No services listed yet.</p>
                                         </div>
                                     ) : (
-                                        vendor.services.map((service, idx) => (
-                                            <motion.div
-                                                key={idx}
-                                                variants={item}
-                                                className="group relative flex flex-col md:flex-row md:items-center justify-between p-6 rounded-3xl bg-black/40 backdrop-blur-md border border-white/5 shadow-lg hover:border-luxe-primary/30 hover:bg-black/60 transition-all duration-300"
-                                            >
-                                                <div className="mb-4 md:mb-0 relative z-10 w-full md:w-2/3">
-                                                    <h3 className="font-bold text-xl text-white group-hover:text-luxe-primary transition-colors">{service.name}</h3>
-                                                    <p className="text-sm text-gray-400 mt-1 flex items-center gap-2">
-                                                        <Clock className="w-3.5 h-3.5 text-luxe-primary" />
-                                                        <span className="font-medium text-gray-300">{service.duration} mins</span>
-                                                        <span className="w-1 h-1 bg-gray-500 rounded-full" />
-                                                        <span className="uppercase tracking-wider text-[10px] text-gray-500">{service.category}</span>
-                                                    </p>
-                                                    {service.description && (
-                                                        <p className="text-sm text-gray-500 mt-2 line-clamp-2 md:line-clamp-1 group-hover:text-gray-400 transition-colors">{service.description}</p>
-                                                    )}
-                                                </div>
-
-                                                <div className="flex items-center gap-5 justify-between md:justify-end relative z-10">
-                                                    <div className="text-right">
-                                                        {service.compareAtPrice && service.compareAtPrice > service.price && (
-                                                            <span className="block text-xs line-through text-gray-600 mb-0.5">₹{service.compareAtPrice}</span>
+                                        vendor.services.map((service, idx) => {
+                                            const isSelected = cart.some(s => s.id === service.id);
+                                            return (
+                                                <motion.div
+                                                    key={idx}
+                                                    variants={item}
+                                                    className={`
+                                                        group relative flex flex-col md:flex-row md:items-center justify-between p-6 rounded-3xl 
+                                                        transition-all duration-300 border shadow-lg
+                                                        ${isSelected
+                                                            ? "bg-luxe-primary/10 border-luxe-primary/50 shadow-luxe-primary/10"
+                                                            : "bg-black/40 backdrop-blur-md border-white/5 hover:border-luxe-primary/30 hover:bg-black/60"
+                                                        }
+                                                    `}
+                                                >
+                                                    <div className="mb-4 md:mb-0 relative z-10 w-full md:w-2/3">
+                                                        <h3 className={`font-bold text-xl transition-colors ${isSelected ? "text-luxe-primary" : "text-white group-hover:text-luxe-primary"}`}>{service.name}</h3>
+                                                        <p className="text-sm text-gray-400 mt-1 flex items-center gap-2">
+                                                            <Clock className="w-3.5 h-3.5 text-luxe-primary" />
+                                                            <span className="font-medium text-gray-300">{service.duration} mins</span>
+                                                            <span className="w-1 h-1 bg-gray-500 rounded-full" />
+                                                            <span className="uppercase tracking-wider text-[10px] text-gray-500">{service.category}</span>
+                                                        </p>
+                                                        {service.description && (
+                                                            <p className="text-sm text-gray-500 mt-2 line-clamp-2 md:line-clamp-1 group-hover:text-gray-400 transition-colors">{service.description}</p>
                                                         )}
-                                                        <span className="font-bold text-2xl tracking-tight text-white group-hover:text-luxe-primary transition-colors drop-shadow-lg">₹{service.price}</span>
                                                     </div>
 
-                                                    {vendor.isBookingEnabled ? (
-                                                        <button
-                                                            onClick={() => handleBookClick(service)}
-                                                            className="px-6 py-3 rounded-xl bg-white text-black text-sm font-bold hover:bg-luxe-primary hover:text-white transition-all shadow-lg hover:shadow-luxe-primary/30"
-                                                        >
-                                                            Book
-                                                        </button>
-                                                    ) : (
-                                                        <button disabled className="px-6 py-3 rounded-xl bg-white/5 text-gray-600 text-sm font-bold cursor-not-allowed border border-white/5">
-                                                            N/A
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </motion.div>
-                                        ))
+                                                    <div className="flex items-center gap-5 justify-between md:justify-end relative z-10">
+                                                        <div className="text-right">
+                                                            <span className="font-bold text-2xl tracking-tight text-white group-hover:text-luxe-primary transition-colors drop-shadow-lg">₹{service.price}</span>
+                                                        </div>
+
+                                                        {vendor.isBookingEnabled && vendor.platformStatus !== 'shadow_banned' ? (
+                                                            <button
+                                                                onClick={() => toggleService(service)}
+                                                                className={`
+                                                                    px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg flex items-center gap-2
+                                                                    ${isSelected
+                                                                        ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 ring-1 ring-red-500/50"
+                                                                        : "bg-white text-black hover:bg-luxe-primary hover:text-white hover:shadow-luxe-primary/30"
+                                                                    }
+                                                                `}
+                                                            >
+                                                                {isSelected ? (
+                                                                    <>Remove <X className="w-4 h-4" /></>
+                                                                ) : (
+                                                                    "Select"
+                                                                )}
+                                                            </button>
+                                                        ) : vendor.platformStatus === 'shadow_banned' ? (
+                                                            <div className="group/tooltip relative">
+                                                                <button disabled className="px-6 py-3 rounded-xl bg-yellow-500/10 text-yellow-500 text-sm font-bold cursor-not-allowed border border-yellow-500/20">
+                                                                    Disabled
+                                                                </button>
+                                                                <div className="absolute bottom-full mb-2 right-0 w-48 p-2 bg-gray-900 text-white text-xs rounded-lg shadow-xl opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none text-center border border-white/10">
+                                                                    Online booking is temporarily disabled for this vendor.
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <button disabled className="px-6 py-3 rounded-xl bg-white/5 text-gray-600 text-sm font-bold cursor-not-allowed border border-white/5">
+                                                                N/A
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </motion.div>
+                                            );
+                                        })
                                     )}
                                 </motion.div>
                             </section>
+
+                            {/* 🛒 STICKY FOOTER CART */}
+                            <AnimatePresence>
+                                {cart.length > 0 && (
+                                    <motion.div
+                                        initial={{ y: 100, opacity: 0 }}
+                                        animate={{ y: 0, opacity: 1 }}
+                                        exit={{ y: 100, opacity: 0 }}
+                                        className="fixed bottom-6 left-0 right-0 z-50 px-4 pointer-events-none"
+                                    >
+                                        <div className="container mx-auto max-w-2xl">
+                                            <div className="bg-[#1a1a1a] border border-white/10 shadow-2xl rounded-2xl p-4 flex items-center justify-between pointer-events-auto ring-1 ring-white/10">
+                                                <div className="flex flex-col pl-2">
+                                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
+                                                        {cart.length} Service{cart.length > 1 ? 's' : ''} Selected
+                                                    </span>
+                                                    <div className="flex items-baseline gap-2">
+                                                        <span className="text-xl font-black text-white">₹{cart.reduce((a, b) => a + b.price, 0)}</span>
+                                                        <span className="text-sm text-gray-500 font-medium">
+                                                            • {cart.reduce((a, b: any) => a + (parseInt(b.duration) || 30), 0)} mins
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    onClick={handleBookBundle}
+                                                    className="px-8 py-3 bg-luxe-primary text-white font-bold rounded-xl hover:bg-luxe-primary/90 transition-colors shadow-lg shadow-luxe-primary/25 flex items-center gap-2"
+                                                >
+                                                    Book Now <ArrowRight className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
 
                             {/* Gallery Section */}
                             <section>
@@ -393,13 +495,22 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
                                         )}
                                     </div>
 
-                                    {vendor.isBookingEnabled ? (
+                                    {vendor.isBookingEnabled && vendor.platformStatus !== 'shadow_banned' ? (
                                         <button
                                             onClick={() => handleBookClick()}
                                             className="w-full py-4 rounded-xl bg-luxe-primary text-white font-bold shadow-lg shadow-luxe-primary/20 hover:bg-luxe-primary/90 hover:scale-[1.02] transition-all"
                                         >
                                             Book Appointment
                                         </button>
+                                    ) : vendor.platformStatus === 'shadow_banned' ? (
+                                        <div className="group/sidebar-tooltip relative w-full">
+                                            <button disabled className="w-full py-4 rounded-xl bg-yellow-500/10 text-yellow-500 font-bold text-center text-sm border border-yellow-500/20 cursor-not-allowed">
+                                                Booking Disabled
+                                            </button>
+                                            <div className="absolute bottom-full mb-2 left-0 right-0 p-2 bg-gray-900 text-white text-xs rounded-lg shadow-xl opacity-0 group-hover/sidebar-tooltip:opacity-100 transition-opacity pointer-events-none text-center border border-white/10 z-50">
+                                                Online booking is temporarily disabled for this vendor.
+                                            </div>
+                                        </div>
                                     ) : (
                                         <div className="w-full py-4 rounded-xl bg-white/5 text-gray-400 font-bold text-center text-sm border border-white/10 opacity-70">
                                             Currently Not Accepting Bookings
@@ -452,7 +563,7 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
                 isOpen={isBookingOpen}
                 onClose={() => setIsBookingOpen(false)}
                 vendorId={vendor.uid}
-                service={selectedService}
+                services={cart}
                 schedule={vendor.schedule}
             />
 
@@ -493,6 +604,6 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
                     </motion.div>
                 )}
             </AnimatePresence>
-        </ThemeWrapper>
+        </ThemeWrapper >
     );
 }

@@ -2,11 +2,13 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { useEffect, useState } from "react";
-import { Search, Users, Smartphone, Mail, ArrowRight, RefreshCw, Clock } from "lucide-react";
+import { Search, Users, Smartphone, Mail, ArrowRight, RefreshCw, Clock, Trash2 } from "lucide-react";
 import { ClientDetailsSheet } from "@/components/dashboard/ClientDetailsSheet";
-import { motion } from "framer-motion";
-import { getAggregatedClients, ClientStats } from "@/app/actions/clients";
+import { motion, AnimatePresence } from "framer-motion";
+import { getAggregatedClients, ClientStats, deleteClientAction } from "@/app/actions/clients";
 import { format } from "date-fns";
+import { toast } from "sonner";
+import { DeleteConfirmationModal } from "@/components/ui/DeleteConfirmationModal";
 
 export default function ClientsPage() {
     const { user } = useAuth();
@@ -14,6 +16,7 @@ export default function ClientsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedClient, setSelectedClient] = useState<ClientStats | null>(null);
+    const [clientToDelete, setClientToDelete] = useState<ClientStats | null>(null);
 
     // Fetch Clients Logic
     const fetchClients = async () => {
@@ -55,6 +58,27 @@ export default function ClientsPage() {
             .join('')
             .substring(0, 2)
             .toUpperCase();
+    };
+
+    const handleDeleteClick = (e: React.MouseEvent, client: ClientStats) => {
+        e.stopPropagation();
+        setClientToDelete(client);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!user || !clientToDelete) return;
+
+        const appointmentIds = clientToDelete.history.map(h => h.id);
+        const result = await deleteClientAction(user.uid, appointmentIds);
+
+        if (result.success) {
+            toast.success("Client profile removed successfully");
+            // Optimistic update or refresh
+            setClients(prev => prev.filter(c => c.id !== clientToDelete.id));
+            setClientToDelete(null);
+        } else {
+            toast.error("Failed to delete client data");
+        }
     };
 
     return (
@@ -130,11 +154,11 @@ export default function ClientsPage() {
                     {filteredClients.map((client) => {
                         const lastSeenDate = new Date(client.lastVisit);
                         return (
-                            <motion.button
+                            <motion.div
                                 key={client.id}
                                 whileHover={{ y: -4 }}
                                 onClick={() => handleClientClick(client)}
-                                className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-violet-100 transition-all text-left group relative overflow-hidden w-full"
+                                className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-violet-100 transition-all text-left group relative overflow-hidden w-full cursor-pointer"
                             >
                                 <div className="flex items-start gap-5 mb-5">
                                     {/* Avatar */}
@@ -189,10 +213,19 @@ export default function ClientsPage() {
                                     </div>
                                 </div>
 
-                                <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0 duration-300">
-                                    <ArrowRight className="w-5 h-5 text-violet-400" />
+                                <button
+                                    onClick={(e) => handleDeleteClick(e, client)}
+                                    className="absolute top-4 right-4 text-gray-300 hover:text-red-500 transition-all z-10 p-2 hover:bg-red-50 rounded-lg"
+                                    title="Delete Client"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+
+                                <div className="absolute bottom-4 right-4 text-violet-400 opacity-50 group-hover:opacity-100 transition-all">
+                                    <ArrowRight className="w-5 h-5" />
                                 </div>
-                            </motion.button>
+
+                            </motion.div>
                         );
                     })}
                 </div>
@@ -204,6 +237,15 @@ export default function ClientsPage() {
                 onClose={() => setSelectedClient(null)}
                 client={selectedClient}
                 vendorUid={user?.uid || ""}
+            />
+
+            <DeleteConfirmationModal
+                isOpen={!!clientToDelete}
+                onClose={() => setClientToDelete(null)}
+                onConfirm={handleConfirmDelete}
+                title="Delete Client?"
+                message="Are you sure you want to remove this client? This will permanently delete their profile and all appointment history."
+                itemName={clientToDelete?.name}
             />
         </div>
     );

@@ -3,10 +3,11 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
+
 import { useAuth } from "@/lib/auth-context";
 import { auth, db } from "@/lib/firebase/config";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, getDoc } from "firebase/firestore";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Menu,
@@ -22,6 +23,7 @@ import {
     Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 
 export function Navbar() {
     const pathname = usePathname();
@@ -75,9 +77,27 @@ export function Navbar() {
         try {
             setAuthLoading(true);
             const provider = new GoogleAuthProvider();
-            await signInWithPopup(auth, provider);
-            router.push("/my-bookings");
-        } catch (error) {
+            const result = await signInWithPopup(auth, provider); // 1. Get the result
+            const user = result.user;
+
+            // 2. 🔍 Check Role Immediately
+            const userDoc = await getDoc(doc(db, "users", user.uid));
+            const userData = userDoc.data();
+            const role = userData?.role;
+
+            // 3. 🚦 Smart Redirect
+            if (role === 'admin') {
+                router.push("/admin/users"); // 👑 Admin -> Throne Room
+            } else if (role === 'vendor') {
+                router.push("/dashboard");   // 🏪 Vendor -> Dashboard
+            } else {
+                router.push("/my-bookings"); // 👤 Customer -> Bookings
+            }
+        } catch (error: any) {
+            if (error.code === 'auth/popup-closed-by-user') {
+                console.log("User cancelled login.");
+                return;
+            }
             console.error("Login failed:", error);
         } finally {
             setAuthLoading(false);
@@ -153,6 +173,7 @@ export function Navbar() {
                                     {isVendor ? (
                                         // 🟢 VENDOR VIEW
                                         <div className="flex items-center gap-4">
+                                            <NotificationBell />
                                             <div className="text-right hidden lg:block">
                                                 <p className="text-xs font-bold text-slate-900 leading-tight">
                                                     {userProfile?.businessName || userProfile?.name || "Luxe Vendor"}
@@ -178,58 +199,61 @@ export function Navbar() {
                                         </div>
                                     ) : (
                                         // 🔵 CUSTOMER VIEW
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => setIsProfileOpen(!isProfileOpen)}
-                                                onBlur={() => setTimeout(() => setIsProfileOpen(false), 200)}
-                                                className="flex items-center gap-2 p-1 pr-3 rounded-full border border-slate-200/60 hover:border-primary/30 transition-all bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md group"
-                                            >
-                                                {user.photoURL ? (
-                                                    <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full object-cover ring-2 ring-white" />
-                                                ) : (
-                                                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                                                        <UserIcon className="w-4 h-4" />
+                                        <div className="flex items-center gap-4">
+                                            <NotificationBell />
+                                            <div className="relative">
+                                                <button
+                                                    onClick={() => setIsProfileOpen(!isProfileOpen)}
+                                                    onBlur={() => setTimeout(() => setIsProfileOpen(false), 200)}
+                                                    className="flex items-center gap-2 p-1 pr-3 rounded-full border border-slate-200/60 hover:border-primary/30 transition-all bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md group"
+                                                >
+                                                    {user.photoURL ? (
+                                                        <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full object-cover ring-2 ring-white" />
+                                                    ) : (
+                                                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                                                            <UserIcon className="w-4 h-4" />
+                                                        </div>
+                                                    )}
+                                                    <div className="text-left flex flex-col justify-center h-full">
+                                                        <span className="text-xs font-bold text-slate-900 max-w-[100px] truncate group-hover:text-primary transition-colors leading-none mb-0.5">
+                                                            {userProfile?.name || user.displayName?.split(" ")[0]}
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-500 font-medium leading-none">Customer</span>
                                                     </div>
-                                                )}
-                                                <div className="text-left flex flex-col justify-center h-full">
-                                                    <span className="text-xs font-bold text-slate-900 max-w-[100px] truncate group-hover:text-primary transition-colors leading-none mb-0.5">
-                                                        {userProfile?.name || user.displayName?.split(" ")[0]}
-                                                    </span>
-                                                    <span className="text-[10px] text-slate-500 font-medium leading-none">Customer</span>
-                                                </div>
 
-                                                <ChevronDown className={cn("w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ml-1", isProfileOpen && "rotate-180")} />
-                                            </button>
+                                                    <ChevronDown className={cn("w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ml-1", isProfileOpen && "rotate-180")} />
+                                                </button>
 
-                                            <AnimatePresence>
-                                                {isProfileOpen && (
-                                                    <motion.div
-                                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                        transition={{ duration: 0.2 }}
-                                                        className="absolute top-full right-0 mt-3 w-60 bg-white/95 backdrop-blur-2xl rounded-2xl shadow-xl shadow-purple-500/10 border border-white/60 p-2 overflow-hidden ring-1 ring-black/5"
-                                                    >
-                                                        <div className="px-3 py-2 mb-2 border-b border-slate-100">
-                                                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Signed in as</p>
-                                                            <p className="text-sm font-bold text-slate-900 truncate">{user.email}</p>
-                                                        </div>
+                                                <AnimatePresence>
+                                                    {isProfileOpen && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                            transition={{ duration: 0.2 }}
+                                                            className="absolute top-full right-0 mt-3 w-60 bg-white/95 backdrop-blur-2xl rounded-2xl shadow-xl shadow-purple-500/10 border border-white/60 p-2 overflow-hidden ring-1 ring-black/5"
+                                                        >
+                                                            <div className="px-3 py-2 mb-2 border-b border-slate-100">
+                                                                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Signed in as</p>
+                                                                <p className="text-sm font-bold text-slate-900 truncate">{user.email}</p>
+                                                            </div>
 
-                                                        <div className="space-y-1">
-                                                            <Link href="/my-bookings" className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 hover:text-primary hover:bg-primary/5 rounded-xl transition-colors">
-                                                                <Calendar className="w-4 h-4" /> My Bookings
-                                                            </Link>
-                                                            <Link href="/settings" className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 hover:text-primary hover:bg-primary/5 rounded-xl transition-colors">
-                                                                <Settings className="w-4 h-4" /> Settings
-                                                            </Link>
-                                                            <div className="h-px bg-slate-100 my-1" />
-                                                            <button onClick={handleSignOut} className="flex items-center gap-3 w-full px-3 py-2.5 text-sm font-medium text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-                                                                <LogOut className="w-4 h-4" /> Sign Out
-                                                            </button>
-                                                        </div>
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
+                                                            <div className="space-y-1">
+                                                                <Link href="/my-bookings" className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 hover:text-primary hover:bg-primary/5 rounded-xl transition-colors">
+                                                                    <Calendar className="w-4 h-4" /> My Bookings
+                                                                </Link>
+                                                                <Link href="/settings" className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 hover:text-primary hover:bg-primary/5 rounded-xl transition-colors">
+                                                                    <Settings className="w-4 h-4" /> Settings
+                                                                </Link>
+                                                                <div className="h-px bg-slate-100 my-1" />
+                                                                <button onClick={handleSignOut} className="flex items-center gap-3 w-full px-3 py-2.5 text-sm font-medium text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                                                                    <LogOut className="w-4 h-4" /> Sign Out
+                                                                </button>
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
                                         </div>
                                     )}
                                 </div>

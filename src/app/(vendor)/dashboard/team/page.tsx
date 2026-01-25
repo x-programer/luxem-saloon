@@ -8,13 +8,17 @@ import { Plus, Trash2 } from "lucide-react";
 import { ImageUploader } from "@/components/dashboard/ImageUploader";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import { DeleteConfirmationModal } from "@/components/ui/DeleteConfirmationModal";
 
 export default function TeamPage() {
     const { user } = useAuth();
     const [staff, setStaff] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Modal State
+    // Delete Modal State
+    const [staffToDelete, setStaffToDelete] = useState<any>(null);
+
+    // Add Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [name, setName] = useState("");
     const [role, setRole] = useState("");
@@ -54,14 +58,16 @@ export default function TeamPage() {
         setIsSubmitting(false);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!user || !confirm("Remove this staff member?")) return;
-        try {
-            await deleteDoc(doc(db, "users", user.uid, "staff", id));
-            toast.success("Staff removed");
-        } catch (error) {
-            toast.error("Delete failed");
-        }
+    const handleDeleteClick = (staffMember: any) => {
+        setStaffToDelete(staffMember);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!user || !staffToDelete) return;
+
+        await deleteDoc(doc(db, "users", user.uid, "staff", staffToDelete.id));
+        toast.success("Staff member removed successfully");
+        setStaffToDelete(null);
     };
 
     const resetForm = () => {
@@ -92,8 +98,8 @@ export default function TeamPage() {
                 {staff.map((member) => (
                     <div key={member.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative group text-center hover:shadow-md transition-shadow">
                         <button
-                            onClick={() => handleDelete(member.id)}
-                            className="absolute top-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleDeleteClick(member)}
+                            className="absolute top-4 right-4 text-gray-300 hover:text-red-500 transition-colors"
                         >
                             <Trash2 className="w-4 h-4" />
                         </button>
@@ -162,6 +168,15 @@ export default function TeamPage() {
                     </div>
                 )}
             </AnimatePresence>
+
+            <DeleteConfirmationModal
+                isOpen={!!staffToDelete}
+                onClose={() => setStaffToDelete(null)}
+                onConfirm={handleConfirmDelete}
+                title="Remove Team Member?"
+                message="Are you sure you want to remove this staff member? They will no longer be visible on your booking page."
+                itemName={staffToDelete?.name}
+            />
         </div>
     );
 }

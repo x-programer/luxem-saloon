@@ -12,7 +12,10 @@ export interface VendorPreview {
     services: string[]; // Simplified list of service names or categories
 }
 
-export async function getAllVendors(searchQuery?: string, searchCity?: string) {
+import { unstable_cache } from "next/cache";
+
+// Internal fetch function (renamed)
+async function fetchAllVendors(searchQuery?: string, searchCity?: string) {
     try {
         // 1. Validation & Sanitization
         let query = searchQuery?.trim().toLowerCase() || "";
@@ -83,3 +86,13 @@ export async function getAllVendors(searchQuery?: string, searchCity?: string) {
         return { success: false, error: error.message };
     }
 }
+
+// 🚀 Cached Version (Public Export)
+export const getAllVendors = unstable_cache(
+    async (searchQuery?: string, searchCity?: string) => fetchAllVendors(searchQuery, searchCity),
+    ['all-vendors-list'], // Key parts
+    {
+        tags: ['vendors'], // Cache Tag for revalidation
+        revalidate: 3600 // Revalidate every hour
+    }
+);

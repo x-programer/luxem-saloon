@@ -106,82 +106,88 @@ export default function BookingsPage() {
     const pendingCount = appointments.filter(a => a.status === 'pending').length;
 
     return (
-        <div className="space-y-6 min-h-screen pb-20">
-            {/* Header Control Center */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-gray-900 flex items-center gap-3">
-                        Schedule
-                        {pendingCount > 0 && (
-                            <span className="px-3 py-1 rounded-full bg-[#6F2DBD]/10 text-[#6F2DBD] text-xs font-bold border border-[#6F2DBD]/20">
-                                {pendingCount} Pending
-                            </span>
-                        )}
-                    </h1>
-                    <p className="text-gray-500 mt-1">Manage your appointments and availability.</p>
-                </div>
+        <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden bg-gray-50/50">
+            {/* Header Control Center - Fixed */}
+            <div className="flex-none p-6 pb-4 bg-white/80 backdrop-blur-sm border-b border-gray-200/50">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-3">
+                            Schedule
+                            {pendingCount > 0 && (
+                                <span className="px-3 py-1 rounded-full bg-[#6F2DBD]/10 text-[#6F2DBD] text-xs font-bold border border-[#6F2DBD]/20">
+                                    {pendingCount} Pending
+                                </span>
+                            )}
+                        </h1>
+                        <p className="text-sm text-gray-500 mt-1">Manage your appointments and availability.</p>
+                    </div>
 
-                <div className="flex items-center gap-3">
-                    {/* View Toggle Pill */}
-                    <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200">
-                        <button
-                            onClick={() => toggleView('list')}
-                            className={cn(
-                                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all",
-                                viewMode === 'list'
-                                    ? "bg-white text-gray-900 shadow-sm"
-                                    : "text-gray-500 hover:text-gray-900"
-                            )}
-                        >
-                            <LayoutList className="w-4 h-4" />
-                            List
-                        </button>
-                        <button
-                            onClick={() => toggleView('calendar')}
-                            className={cn(
-                                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all",
-                                viewMode === 'calendar'
-                                    ? "bg-white text-gray-900 shadow-sm"
-                                    : "text-gray-500 hover:text-gray-900"
-                            )}
-                        >
-                            <CalendarIcon className="w-4 h-4" />
-                            Calendar
-                        </button>
+                    <div className="flex items-center gap-3">
+                        {/* View Toggle Pill */}
+                        <div className="flex bg-gray-100/80 p-1 rounded-xl border border-gray-200">
+                            <button
+                                onClick={() => toggleView('list')}
+                                className={cn(
+                                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all",
+                                    viewMode === 'list'
+                                        ? "bg-white text-gray-900 shadow-sm"
+                                        : "text-gray-500 hover:text-gray-900"
+                                )}
+                            >
+                                <LayoutList className="w-4 h-4" />
+                                List
+                            </button>
+                            <button
+                                onClick={() => toggleView('calendar')}
+                                className={cn(
+                                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all",
+                                    viewMode === 'calendar'
+                                        ? "bg-white text-gray-900 shadow-sm"
+                                        : "text-gray-500 hover:text-gray-900"
+                                )}
+                            >
+                                <CalendarIcon className="w-4 h-4" />
+                                Calendar
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Content Body */}
-            <AnimatePresence mode="wait">
-                {viewMode === 'list' ? (
-                    <motion.div
-                        key="list"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                    >
-                        <BookingListView
-                            appointments={appointments}
-                            onUpdateStatus={handleUpdateStatus}
-                        />
-                    </motion.div>
-                ) : (
-                    <motion.div
-                        key="calendar"
-                        initial={{ opacity: 0, scale: 0.98 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.98 }}
-                        transition={{ duration: 0.2 }}
-                    >
-                        <SmartCalendarView
-                            appointments={appointments}
-                            onSelectEvent={handleEventSelect}
-                        />
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* Content Body - Scrollable Area handled internally by components */}
+            <div className="flex-1 overflow-hidden relative">
+                <AnimatePresence mode="wait">
+                    {viewMode === 'list' ? (
+                        <motion.div
+                            key="list"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.2 }}
+                            className="h-full"
+                        >
+                            <BookingListView
+                                appointments={appointments}
+                                onUpdateStatus={handleUpdateStatus}
+                            />
+                        </motion.div>
+                    ) : (
+                        <motion.div
+                            key="calendar"
+                            initial={{ opacity: 0, scale: 0.98 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.98 }}
+                            transition={{ duration: 0.2 }}
+                            className="h-full overflow-y-auto p-4 md:p-6" // Calendar handles its own scroll or container does
+                        >
+                            <SmartCalendarView
+                                appointments={appointments}
+                                onSelectEvent={handleEventSelect}
+                            />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
 
             {/* Shared Details Sheet */}
             <BookingDetailsSheet

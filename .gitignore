@@ -9,6 +9,7 @@ node_modules
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+luxem-saloon-firebase-adminsdk-fbsvc-5ed5ce0ad9.json
 
 # testing
 /coverage

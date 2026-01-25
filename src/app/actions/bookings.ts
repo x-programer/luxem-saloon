@@ -1,8 +1,10 @@
 "use server";
 
-import { adminDb } from "@/lib/firebase/admin";
+import { adminDb, adminAuth } from "@/lib/firebase/admin";
 import { Timestamp } from "firebase-admin/firestore";
 import { syncBookingToGoogle } from "./calendar-sync";
+import { sendNotification } from "./notifications";
+import { cookies } from "next/headers";
 
 interface BookingData {
     vendorId: string;
@@ -12,9 +14,11 @@ interface BookingData {
     customerPhone: string;
     serviceId: string;
     serviceName: string;
+    duration: number; // 👈 Added duration
     date: string; // YYYY-MM-DD
     time: string; // HH:MM
     price: number;
+    services?: { id: string; name: string; price: number; duration: number }[]; // 👈 NEW: Bundle details
 }
 
 export async function createBooking(data: BookingData) {
@@ -48,12 +52,24 @@ export async function createBooking(data: BookingData) {
         }
         // --- 🔒 COLLISION CHECK (End) ---
 
+        // Construct Payload
         const bookingPayload = {
             ...data,
             date: startTimestamp, // Use the same timestamp we checked
             status: 'pending', // Force status
             createdAt: Timestamp.now(),
         };
+
+        // If multiple services, strictly ensure duration/price match (optional server-side validation here)
+        // For now, we trust the client passed the correct total duration/price or we could recalc:
+        if (data.services && data.services.length > 0) {
+            // We could override totals here for security:
+            // const totalDuration = data.services.reduce((acc, s) => acc + (s.duration || 0), 0);
+            // const totalPrice = data.services.reduce((acc, s) => acc + (s.price || 0), 0);
+            // bookingPayload.duration = totalDuration;
+            // bookingPayload.price = totalPrice;
+            // bookingPayload.serviceName = data.services.map(s => s.name).join(" + ");
+        }
 
         // 4. Update User Profile with Phone Number (if missing)
         // We do this in parallel to not block the main booking flow too much, 
@@ -75,6 +91,18 @@ export async function createBooking(data: BookingData) {
             .doc(vendorId)
             .collection('appointments')
             .add(bookingPayload);
+
+        // 🔔 Notify Vendor
+        try {
+            await sendNotification(vendorId, {
+                title: "New Appointment Request",
+                message: `A customer has booked ${data.serviceName} for ${data.date}.`, // Using raw string for now
+                type: 'info',
+                link: '/dashboard/bookings'
+            });
+        } catch (notifError) {
+            console.warn("Failed to notify vendor:", notifError);
+        }
 
         // 6. Attempt Google Calendar Sync (Non-Blocking / Resilient)
         // We race against a timeout so the UI doesn't hang.
@@ -114,6 +142,31 @@ export async function acceptBooking(bookingId: string, vendorId: string) {
             .collection('appointments')
             .doc(bookingId)
             .update({ status: 'confirmed' });
+
+        // 🔔 Notify Customer
+        try {
+            // Fetch booking details to get customer ID and Service Name
+            const bookingRef = await adminDb
+                .collection('users')
+                .doc(vendorId)
+                .collection('appointments')
+                .doc(bookingId)
+                .get();
+
+            if (bookingRef.exists) {
+                const bookingData = bookingRef.data();
+                if (bookingData?.customerId) {
+                    await sendNotification(bookingData.customerId, {
+                        title: "Booking Confirmed! 🎉",
+                        message: `Your appointment for ${bookingData.serviceName} has been confirmed.`,
+                        type: 'success',
+                        link: '/my-bookings'
+                    });
+                }
+            }
+        } catch (notifError) {
+            console.warn("Failed to send notification:", notifError);
+        }
 
         // 2. 🚀 TRIGGER GOOGLE SYNC (Server-Side)
         let syncResult = { success: false, error: "Unknown error" };
@@ -180,6 +233,47 @@ export async function cancelBooking(bookingId: string, vendorId: string) {
             .collection('appointments')
             .doc(bookingId)
             .update({ status: 'cancelled' });
+
+        // 🔔 Notify Customer
+        // Fetch to get customer ID
+        const bookingRef = await adminDb
+            .collection('users')
+            .doc(vendorId)
+            .collection('appointments')
+            .doc(bookingId)
+            .get();
+
+        if (bookingRef.exists) {
+            const bookingData = bookingRef.data();
+
+            // Determine who is cancelling to notify the OTHER party
+            const cookieStore = await cookies();
+            const sessionCookie = cookieStore.get("session")?.value || "";
+            let currentUserId = "";
+            try {
+                if (sessionCookie) {
+                    const decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
+                    currentUserId = decoded.uid;
+                }
+            } catch (e) {
+                console.warn("Could not verify session for cancellation notification logic", e);
+            }
+
+            const isVendor = currentUserId === vendorId;
+            // If Vendor blocked/cancelled -> Notify Customer
+            // If Customer cancelled -> Notify Vendor
+            const targetId = isVendor ? bookingData?.customerId : vendorId;
+            const notificationTitle = isVendor ? "Appointment Cancelled by Vendor" : "Appointment Cancelled by Customer";
+
+            if (targetId) {
+                await sendNotification(targetId, {
+                    title: notificationTitle,
+                    message: `The appointment for ${bookingData?.serviceName || 'Service'} has been cancelled.`,
+                    type: 'error',
+                    link: isVendor ? '/my-bookings' : '/dashboard/bookings'
+                });
+            }
+        }
 
         return { success: true };
     } catch (error: any) {

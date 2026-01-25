@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import { Lock, Loader2, Mail, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase/config";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase/config";
 
 export default function LoginPage() {
     const { register, handleSubmit, formState: { errors } } = useForm();
@@ -20,10 +21,46 @@ export default function LoginPage() {
         setError("");
 
         try {
-            await signInWithEmailAndPassword(auth, data.email, data.password);
-            router.push("/dashboard");
+            // 1. Authenticate with Firebase
+            const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
+            const user = userCredential.user;
+
+            // 2. 🔍 Check "Who is this?"
+
+            // HARDCODED SUPER ADMIN CHECK (Must match auth-context.tsx)
+            const ADMIN_EMAIL = "ringtoneboy1530@gmail.com";
+            if (user.email === ADMIN_EMAIL) {
+                console.log("Super Admin detected via email override.");
+                router.push("/admin/users");
+                return;
+            }
+
+            const userDoc = await getDoc(doc(db, "users", user.uid));
+
+            if (!userDoc.exists()) {
+                console.warn("User document not found in Firestore for UID:", user.uid);
+                router.push("/");
+                return;
+            }
+
+            const userData = userDoc.data();
+            const role = userData?.role;
+
+            console.log("Detected Role:", role); // Debugging
+
+            // 3. 🚦 Redirect based on Role
+            if (role === 'admin') {
+                router.push("/admin/users"); // Super Admin Dashboard
+            } else if (role === 'vendor') {
+                router.push("/dashboard");   // Vendor Dashboard
+            } else if (role === 'client') {
+                router.push("/my-bookings"); // Client Dashboard
+            } else {
+                router.push("/");            // Default / Home
+            }
+
         } catch (e: any) {
-            // Error Handling without Console Log
+            console.error(e);
             if (
                 e.code === "auth/invalid-credential" ||
                 e.code === "auth/user-not-found" ||

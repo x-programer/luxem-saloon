@@ -14,12 +14,12 @@ interface BookingModalProps {
     isOpen: boolean;
     onClose: () => void;
     vendorId: string;
-    service?: any;
+    services: any[]; // 👈 Changed from 'service'
     schedule: any;
 }
 
-export function BookingModal({ isOpen, onClose, vendorId, service, schedule }: BookingModalProps) {
-    const router = useRouter(); // 👈 Init router
+export function BookingModal({ isOpen, onClose, vendorId, services, schedule }: BookingModalProps) {
+    const router = useRouter();
     const [step, setStep] = useState(1);
     const [date, setDate] = useState("");
     const [time, setTime] = useState("");
@@ -36,6 +36,11 @@ export function BookingModal({ isOpen, onClose, vendorId, service, schedule }: B
     const [loadingSlots, setLoadingSlots] = useState(false);
 
     const { user } = useAuth();
+
+    // 🧮 CALCULATE TOTALS
+    const totalDuration = services.reduce((acc, s) => acc + (parseInt(s.duration) || 30), 0) || 30;
+    const totalPrice = services.reduce((acc, s) => acc + (s.price || 0), 0);
+    const serviceNames = services.map(s => s.name).join(" + ") || "General Inquiry";
 
     // Reset state when opening
     useEffect(() => {
@@ -62,7 +67,8 @@ export function BookingModal({ isOpen, onClose, vendorId, service, schedule }: B
             setAvailableSlots([]);
             setTime(""); // Reset time selection on date change
             try {
-                const slots = await getDayAvailability(vendorId, date);
+                // Pass TOTAL duration
+                const slots = await getDayAvailability(vendorId, date, totalDuration);
                 setAvailableSlots(slots);
             } catch (err) {
                 console.error("Failed to load slots", err);
@@ -72,7 +78,7 @@ export function BookingModal({ isOpen, onClose, vendorId, service, schedule }: B
         };
 
         fetchSlots();
-    }, [date, vendorId]);
+    }, [date, vendorId, totalDuration]); // 👈 Added totalDuration as dep
 
     const validateInputs = () => {
         if (!date || !time || !name || !phone) {
@@ -105,18 +111,25 @@ export function BookingModal({ isOpen, onClose, vendorId, service, schedule }: B
 
             if (!user) throw new Error("Authentication missing.");
 
-            // Call Server Action
+            // Call Server Action with BUNDLE DATA
             await createBooking({
                 vendorId,
                 customerId: user.uid,
                 customerEmail: user.email,
                 customerName: name,
-                customerPhone: phone, // 👈 Crucial: Sends the phone they typed
-                serviceId: service?.id || "general",
-                serviceName: service?.name || "General Inquiry",
+                customerPhone: phone,
+                serviceId: services.length === 1 ? services[0].id : "bundle",
+                serviceName: serviceNames,
+                services: services.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    price: s.price,
+                    duration: parseInt(s.duration) || 30
+                })),
+                duration: totalDuration,
                 date,
                 time,
-                price: service?.price || 0,
+                price: totalPrice,
             });
 
             setStep(2); // Show Success View
@@ -128,7 +141,7 @@ export function BookingModal({ isOpen, onClose, vendorId, service, schedule }: B
         } finally {
             setIsSubmitting(false);
         }
-    }, [user, vendorId, service, date, time, name, phone]); // Dependencies
+    }, [user, vendorId, services, date, time, name, phone, totalDuration, totalPrice, serviceNames]);
 
     // ⚡️ AUTO-RESUME: Triggers when User logs in during Auth Step
     useEffect(() => {
@@ -164,6 +177,10 @@ export function BookingModal({ isOpen, onClose, vendorId, service, schedule }: B
             await signInWithPopup(auth, provider);
             // The useEffect above will catch the new 'user' and trigger processBooking
         } catch (err: any) {
+            if (err.code === 'auth/popup-closed-by-user') {
+                console.log("User cancelled booking login.");
+                return;
+            }
             console.error("Login Error:", err);
             setError("Failed to sign in. Please try again.");
         }
@@ -208,8 +225,11 @@ export function BookingModal({ isOpen, onClose, vendorId, service, schedule }: B
                                     <h3 className="font-bold text-xl text-white">
                                         {step === 2 ? "Booking Confirmed" : isAuthStep ? "Sign in to Finish" : "Book Appointment"}
                                     </h3>
-                                    {service && step === 1 && !isAuthStep && (
-                                        <p className="text-sm text-gray-400 mt-1">{service.name} • {service.duration} min</p>
+                                    {step === 1 && !isAuthStep && (
+                                        <div className="mt-1">
+                                            <p className="text-sm text-white font-medium">{serviceNames}</p>
+                                            <p className="text-xs text-gray-400">Total: {totalDuration} mins • ₹{totalPrice}</p>
+                                        </div>
                                     )}
                                 </div>
                                 <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">

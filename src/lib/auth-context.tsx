@@ -39,10 +39,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             setLoading(true);
             if (currentUser) {
-                setUser(currentUser);
-
                 // 1. Hardcoded Super Admin Check
                 if (currentUser.email === ADMIN_EMAIL) {
+                    setUser(currentUser);
                     setRole("admin");
                 } else {
                     // 2. Fetch Role from Firestore for normal users
@@ -52,14 +51,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                         if (userDoc.exists()) {
                             const data = userDoc.data();
+
+                            // CHECK SUSPENSION
+                            if (data.platformStatus === 'suspended') {
+                                await firebaseSignOut(auth);
+                                setUser(null);
+                                setRole(null);
+                                alert("Your account has been suspended. Please contact support.");
+                                setLoading(false);
+                                return;
+                            }
+
+                            setUser(currentUser);
                             // Default to vendor if no role specified
                             setRole(data.role || "vendor");
                         } else {
                             // If doc doesn't exist yet (signup in progress), wait or default to vendor
+                            setUser(currentUser);
                             setRole("vendor");
                         }
                     } catch (error) {
                         console.error("Error fetching user role:", error);
+                        setUser(currentUser);
                         setRole("vendor");
                     }
                 }

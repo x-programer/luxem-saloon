@@ -69,8 +69,8 @@ export function ServiceCard({ id, name, price, duration, category, description, 
                     <Clock className="w-3.5 h-3.5" />
                     {duration} min
                 </div>
-
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* Actions */}
+                <div className="flex items-center gap-2">
                     <button
                         onClick={onView}
                         className="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-[#6F2DBD] transition-colors"

@@ -1,15 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { cancelBooking } from "@/app/actions/bookings";
 import { useCustomerBookings } from "@/hooks/useCustomerBookings";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase/config";
-import { Loader2, Calendar, Clock, MapPin, XCircle, AlertCircle, CalendarDays, Moon, Sun, ArrowRight, Search, LogOut } from "lucide-react";
+import { Loader2, Calendar, Clock, MapPin, XCircle, CalendarDays, Moon, Sun, Search, LogOut, Info } from "lucide-react";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { SearchForm } from "@/components/shared/SearchForm";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/shared/NotificationBell";
+import dynamic from "next/dynamic";
+import { BookingDetailsModal } from "@/components/booking/BookingDetailsModal";
+
+// 🚀 Optimization: Lazy load the Profile Modal so it doesn't slow down initial page load
+const ProfileSettings = dynamic(
+    () => import("@/components/customer/ProfileSettings").then((mod) => mod.ProfileSettings),
+    { ssr: false }
+);
 
 // Helper to format currency
 const formatPrice = (price: number) => {
@@ -23,12 +33,16 @@ export default function MyBookingsPage() {
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
 
-    // ⚡️ Real-Time Data Hook
-    const { bookings, loading: bookingsLoading, error } = useCustomerBookings(user?.uid);
+    // ⚡️ Real-Time Data Hooks
+    const { bookings, loading: bookingsLoading } = useCustomerBookings(user?.uid);
+    // Pre-fetch profile data in background
+    const { profile } = useUserProfile(user?.uid);
 
     const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
     const [cancellingId, setCancellingId] = useState<string | null>(null);
-    const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+    const [theme, setTheme] = useState<'light' | 'dark'>('light');
+    const [showProfile, setShowProfile] = useState(false);
+    const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
 
     // Scroll progress for header effects
     const { scrollY } = useScroll();
@@ -43,6 +57,28 @@ export default function MyBookingsPage() {
         }
     }, [user, authLoading, router]);
 
+    // 🛡️ MEMOIZATION MOVED UP (Fixes Rules of Hooks Error)
+    // We calculate this BEFORE any return statements.
+    const { upcomingBookings, historyBookings } = useMemo(() => {
+        // Safety check: If data isn't loaded yet, return empty arrays
+        if (!bookings) return { upcomingBookings: [], historyBookings: [] };
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const upcoming = bookings.filter(b => {
+            const d = b.date && typeof (b.date as any).toDate === 'function' ? (b.date as any).toDate() : new Date(b.date as string);
+            return d >= today && b.status !== 'cancelled' && b.status !== 'declined';
+        });
+
+        const history = bookings.filter(b => {
+            const d = b.date && typeof (b.date as any).toDate === 'function' ? (b.date as any).toDate() : new Date(b.date as string);
+            return d < today || ['cancelled', 'declined', 'completed'].includes(b.status);
+        });
+
+        return { upcomingBookings: upcoming, historyBookings: history };
+    }, [bookings]); // Only re-run when 'bookings' changes
+
     const handleSignOut = async () => {
         try {
             await auth.signOut();
@@ -53,6 +89,7 @@ export default function MyBookingsPage() {
     };
 
     const handleCancel = async (bookingId: string, vendorId: string) => {
+        if (!user) return;
         if (!confirm("Are you sure you want to cancel this appointment?")) return;
 
         setCancellingId(bookingId);
@@ -69,6 +106,7 @@ export default function MyBookingsPage() {
         }
     };
 
+    // 🛑 Conditional Returns (Now safe because useMemo is above this)
     if (authLoading || bookingsLoading) {
         return (
             <div className={cn("min-h-screen flex items-center justify-center transition-colors duration-500", theme === 'dark' ? "bg-black" : "bg-gray-50")}>
@@ -79,27 +117,13 @@ export default function MyBookingsPage() {
 
     if (!user) return null;
 
-    // Filter Bookings
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const upcomingBookings = bookings.filter(b => {
-        const d = b.date && typeof (b.date as any).toDate === 'function' ? (b.date as any).toDate() : new Date(b.date as string);
-        return d >= today && b.status !== 'cancelled' && b.status !== 'declined';
-    });
-
-    const historyBookings = bookings.filter(b => {
-        const d = b.date && typeof (b.date as any).toDate === 'function' ? (b.date as any).toDate() : new Date(b.date as string);
-        return d < today || ['cancelled', 'declined', 'completed'].includes(b.status);
-    });
-
     const displayBookings = activeTab === 'upcoming' ? upcomingBookings : historyBookings;
 
     // Theme Classes
     const pageBg = theme === 'dark' ? "bg-[#0a0a0a]" : "bg-[#f8f9fc]";
     const textMain = theme === 'dark' ? "text-white" : "text-slate-900";
     const textMuted = theme === 'dark' ? "text-white/40" : "text-slate-500";
-    const cardBg = theme === 'dark' ? "bg-[#111] hover:bg-[#161616]" : "bg-white hover:bg-white"; // Added separate hover logic manually in classes if needed
+    const cardBg = theme === 'dark' ? "bg-[#111] hover:bg-[#161616]" : "bg-white hover:bg-white";
     const cardBorder = theme === 'dark' ? "border-white/5 group-hover:border-white/10" : "border-slate-200 group-hover:border-primary/20";
     const tabActive = theme === 'dark' ? "bg-white text-black" : "bg-slate-900 text-white";
     const tabInactive = theme === 'dark' ? "text-white/40 hover:text-white" : "text-slate-500 hover:text-slate-900";
@@ -131,13 +155,34 @@ export default function MyBookingsPage() {
                                 </div>
                             </motion.div>
 
-                            {/* Theme Toggle (Mobile) */}
-                            <button
-                                onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
-                                className={cn("md:hidden p-2 rounded-full transition-all", theme === 'dark' ? "bg-white/10 text-white" : "bg-slate-100 text-slate-700")}
-                            >
-                                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                            </button>
+                            {/* Mobile Actions */}
+                            <div className="flex md:hidden items-center gap-2">
+                                <NotificationBell />
+                                <button
+                                    onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+                                    className={cn("p-2 rounded-full transition-all", theme === 'dark' ? "bg-white/10 text-white" : "bg-slate-100 text-slate-700")}
+                                >
+                                    {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                                </button>
+                                <button
+                                    onClick={() => setShowProfile(true)}
+                                    className={cn("p-2 rounded-full transition-all", theme === 'dark' ? "bg-white/10 text-white" : "bg-slate-100 text-slate-700")}
+                                >
+                                    {profile?.photoURL || user.photoURL ? (
+                                        <img src={profile?.photoURL || user.photoURL || ""} alt="Profile" className="w-5 h-5 rounded-full object-cover" />
+                                    ) : (
+                                        <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold", theme === 'dark' ? "bg-primary text-white" : "bg-primary/10 text-primary")}>
+                                            {(user.email?.[0] || 'U').toUpperCase()}
+                                        </div>
+                                    )}
+                                </button>
+                                <button
+                                    onClick={handleSignOut}
+                                    className={cn("p-2 rounded-full transition-all text-red-500", theme === 'dark' ? "bg-red-500/10" : "bg-red-50")}
+                                >
+                                    <LogOut className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Search Bar (Tablet/Desktop) */}
@@ -161,18 +206,40 @@ export default function MyBookingsPage() {
 
                         {/* Actions (Desktop) */}
                         <div className="hidden md:flex items-center gap-3">
+                            <NotificationBell />
                             <button
                                 onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
                                 className={cn("p-2.5 rounded-full transition-all hover:scale-110 active:scale-95 shadow-sm", theme === 'dark' ? "bg-white/10 text-white hover:bg-white/20" : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50")}
                             >
                                 {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                             </button>
+
+                            <button
+                                onClick={() => setShowProfile(true)}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-full transition-all hover:scale-105 active:scale-95 shadow-sm flex items-center gap-2 text-sm font-bold border",
+                                    theme === 'dark'
+                                        ? "bg-white/10 text-white border-white/5 hover:bg-white/20"
+                                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                                )}
+                                title="Profile Settings"
+                            >
+                                {profile?.photoURL || user.photoURL ? (
+                                    <img src={profile?.photoURL || user.photoURL || ""} alt="Profile" className="w-6 h-6 rounded-full object-cover" />
+                                ) : (
+                                    <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-xs", theme === 'dark' ? "bg-primary text-white" : "bg-primary/10 text-primary")}>
+                                        {(user.email?.[0] || 'U').toUpperCase()}
+                                    </div>
+                                )}
+                                <span className="hidden lg:inline">{profile?.name || user.displayName || user.email?.split('@')[0]}</span>
+                            </button>
+
                             <button
                                 onClick={handleSignOut}
                                 className={cn("p-2.5 rounded-full transition-all hover:scale-110 active:scale-95 shadow-sm", theme === 'dark' ? "bg-red-500/10 text-red-400 hover:bg-red-500/20" : "bg-white text-red-500 border border-slate-200 hover:bg-red-50")}
                                 title="Sign Out"
                             >
-                                <LogOut className="w-4 h-4" />
+                                <XCircle className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
@@ -233,7 +300,7 @@ export default function MyBookingsPage() {
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
                                 className={cn(
-                                    "px-6 py-2 rounded-lg text-sm font-bold transition-all duration-300",
+                                    "px-6 py-2 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2",
                                     activeTab === tab ? cn("shadow-md scale-105", tabActive) : tabInactive
                                 )}
                             >
@@ -243,7 +310,7 @@ export default function MyBookingsPage() {
                     </div>
                 </div>
 
-                {/* Booking List */}
+                {/* Content */}
                 <div className="space-y-4 pb-20">
                     <AnimatePresence mode="popLayout">
                         {displayBookings.length > 0 ? (
@@ -310,21 +377,36 @@ export default function MyBookingsPage() {
                                                 <div className="flex items-center justify-between pt-2">
                                                     <p className={cn("text-sm font-semibold", textMuted)}>{formatPrice(booking.price)}</p>
 
-                                                    {booking.status !== 'cancelled' && booking.status !== 'completed' && booking.status !== 'declined' && activeTab === 'upcoming' && (
+                                                    <div className="flex items-center gap-2">
                                                         <button
-                                                            onClick={() => handleCancel(booking.id, booking.vendorId)}
-                                                            disabled={cancellingId === booking.id}
+                                                            onClick={() => setSelectedBooking(booking)}
                                                             className={cn(
-                                                                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border",
+                                                                "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border",
                                                                 theme === 'dark'
-                                                                    ? "border-red-500/20 text-red-400 hover:bg-red-950/30"
-                                                                    : "border-red-200 text-red-600 hover:bg-red-50"
+                                                                    ? "border-white/10 text-gray-300 hover:bg-white/5"
+                                                                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
                                                             )}
                                                         >
-                                                            {cancellingId === booking.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
-                                                            Cancel
+                                                            <Info className="w-3.5 h-3.5" />
+                                                            Details
                                                         </button>
-                                                    )}
+
+                                                        {booking.status !== 'cancelled' && booking.status !== 'completed' && booking.status !== 'declined' && activeTab === 'upcoming' && (
+                                                            <button
+                                                                onClick={() => handleCancel(booking.id, booking.vendorId)}
+                                                                disabled={cancellingId === booking.id}
+                                                                className={cn(
+                                                                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border",
+                                                                    theme === 'dark'
+                                                                        ? "border-red-500/20 text-red-400 hover:bg-red-950/30"
+                                                                        : "border-red-200 text-red-600 hover:bg-red-50"
+                                                                )}
+                                                            >
+                                                                {cancellingId === booking.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                                                                Cancel
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -352,6 +434,48 @@ export default function MyBookingsPage() {
                     </AnimatePresence>
                 </div>
             </div>
+
+            {/* Profile Modal */}
+            <AnimatePresence>
+                {showProfile && (
+                    <>
+                        {/* Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowProfile(false)}
+                            className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm"
+                        />
+                        {/* Modal */}
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="fixed inset-0 z-[70] flex items-center justify-center p-4 pointer-events-none"
+                        >
+                            <div className="w-full max-w-lg pointer-events-auto">
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setShowProfile(false)}
+                                        className="absolute -top-12 right-0 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-all pointer-events-auto"
+                                    >
+                                        <XCircle className="w-6 h-6" />
+                                    </button>
+                                    <ProfileSettings initialData={profile} onClose={() => setShowProfile(false)} />
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            {/* Booking Details Modal */}
+            <BookingDetailsModal
+                isOpen={!!selectedBooking}
+                onClose={() => setSelectedBooking(null)}
+                booking={selectedBooking}
+            />
         </div>
     );
 }

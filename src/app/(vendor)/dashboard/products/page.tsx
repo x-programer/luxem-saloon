@@ -112,7 +112,7 @@ export default function ProductsPage() {
                     <div key={product.id} className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm group hover:shadow-md transition-shadow relative">
                         <button
                             onClick={() => handleDelete(product.id)}
-                            className="absolute top-4 right-4 z-10 p-2 bg-white/80 backdrop-blur-sm rounded-full text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute top-4 right-4 z-10 p-2 bg-white/80 backdrop-blur-sm rounded-full text-gray-400 hover:text-red-500 transition-colors shadow-sm"
                         >
                             <Trash2 className="w-4 h-4" />
                         </button>

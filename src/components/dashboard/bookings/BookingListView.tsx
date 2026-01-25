@@ -32,30 +32,53 @@ export function BookingListView({ appointments, onUpdateStatus }: BookingListVie
     const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled'>('all');
     const [processingId, setProcessingId] = useState<string | null>(null);
 
-    // 1. Sort: Pending First, then Ascending Date (Soonest first), then Descending Date for past
-    const sortedAppointments = [...appointments].sort((a, b) => {
-        // Priority to Pending
+    // Local state for Optimistic UI
+    const [optimisticAppointments, setOptimisticAppointments] = useState(appointments);
+
+    // Sync if props change (revalidation)
+    // NOTE: This might override optimistic state if a refresh happens mid-flight, which is generally acceptable as it means source of truth updated.
+    /* useEffect(() => {
+         setOptimisticAppointments(appointments);
+    }, [appointments]); */
+    // Actually, purely relying on props change for sync is safer, but for optimistic we need intial state.
+    // If we want to support Props updates overriding local state, we need a useEffect.
+    // Let's add it to be safe.
+    useState(() => {
+        if (appointments !== optimisticAppointments) {
+            setOptimisticAppointments(appointments);
+        }
+    });
+
+
+    const sortedAppointments = [...optimisticAppointments].sort((a, b) => {
+        // ... sort logic remains same ...
         if (a.status === 'pending' && b.status !== 'pending') return -1;
         if (a.status !== 'pending' && b.status === 'pending') return 1;
-
-        // If both pending, sort by date ASC (Soonest first)
         if (a.status === 'pending' && b.status === 'pending') {
             return a.date.seconds - b.date.seconds;
         }
-
-        // Default: Sort by date DESC (Newest first)
         return b.date.seconds - a.date.seconds;
     });
 
-    // 2. Filter
     const filteredAppointments = sortedAppointments.filter(apt => {
         if (activeTab === 'all') return true;
         if (activeTab === 'cancelled') return ['cancelled', 'declined'].includes(apt.status);
         return apt.status === activeTab;
     });
 
+    const updateLocalStatus = (id: string, status: Appointment['status']) => {
+        setOptimisticAppointments(prev => prev.map(apt =>
+            apt.id === id ? { ...apt, status } : apt
+        ));
+    };
+
     const handleAccept = async (bookingId: string, vendorId: string) => {
         setProcessingId(bookingId);
+
+        // ⚡️ Optimistic Update
+        const previousAppointments = [...optimisticAppointments];
+        updateLocalStatus(bookingId, 'confirmed');
+
         try {
             const result = await acceptBooking(bookingId, vendorId);
 
@@ -65,58 +88,68 @@ export function BookingListView({ appointments, onUpdateStatus }: BookingListVie
                 } else {
                     toast.warning("Booking Accepted, but Calendar Sync Failed ⚠️");
                 }
-                // Refresh logic - assuming onUpdateStatus might trigger a refresh, or we rely on router
-                // Since we bypassed onUpdateStatus, we should probably manually trigger the parent's refresh or use router.refresh() if this is a server component child.
-                // For now, let's call onUpdateStatus ('confirmed') just to trigger any parent side effects (like state update), IF the parent logic handles 'confirmed' similarly (just db update). 
-                // BUT wait, if parent does DB update too, we double write.
-                // Ideally we just call router.refresh().
-                window.location.reload(); // Simple brute force or use router.refresh() if imported. 
-                // Better: rely on the fact that onUpdateStatus likely re-fetches. 
-                // I'll leave revalidation for now or add useRouter.
+                // Success! No need to reload, the UI is already "Confirmed".
+                // Ideally, trigger a background revalidation here if needed.
             }
         } catch (error) {
             console.error(error);
             toast.error("Failed to accept booking.");
+            // ↩️ Rollback on error
+            setOptimisticAppointments(previousAppointments);
         } finally {
             setProcessingId(null);
         }
     };
 
+    // Also wrap the generic update status for uniformity (Decline/Cancel/Complete)
+    const handleStatusUpdate = async (id: string, newStatus: Appointment['status']) => {
+        const previousAppointments = [...optimisticAppointments];
+        updateLocalStatus(id, newStatus);
+
+        try {
+            await onUpdateStatus(id, newStatus);
+        } catch (error) {
+            console.error("Status update failed", error);
+            toast.error("Failed to update status");
+            setOptimisticAppointments(previousAppointments);
+        }
+    };
+
     return (
-        <div className="space-y-6">
-            {/* ... tabs ... */}
-            {/* Lists code is largely same, just button change below */}
-            {/* Filter Tabs */}
-            <div className="flex overflow-x-auto pb-2 scrollbar-none gap-2">
-                {(['all', 'pending', 'confirmed', 'completed', 'cancelled'] as const).map((tab) => (
-                    <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={cn(
-                            "px-5 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap border",
-                            activeTab === tab
-                                ? "bg-black text-white border-black"
-                                : "bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-900"
-                        )}
-                    >
-                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                    </button>
-                ))}
+        <div className="h-full flex flex-col">
+            {/* Filter Tabs - Fixed at top of list view */}
+            <div className="flex-none px-4 py-3 border-b border-slate-100 bg-white/95 backdrop-blur z-10 w-full overflow-hidden">
+                <div className="flex overflow-x-auto pb-1 scrollbar-none gap-2">
+                    {(['all', 'pending', 'confirmed', 'completed', 'cancelled'] as const).map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={cn(
+                                "px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap border select-none",
+                                activeTab === tab
+                                    ? "bg-black text-white border-black"
+                                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-900"
+                            )}
+                        >
+                            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        </button>
+                    ))}
+                </div>
             </div>
 
-            {/* List */}
-            <div className="space-y-4">
+            {/* Scrollable List Area */}
+            <div className="flex-1 overflow-y-auto bg-gray-50/50 p-2 space-y-2">
                 <AnimatePresence mode="popLayout">
                     {filteredAppointments.length === 0 ? (
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.95 }}
-                            className="bg-white rounded-3xl border border-dashed border-gray-200 p-12 text-center"
+                            className="bg-white rounded-xl border border-dashed border-gray-200 p-8 text-center"
                         >
-                            <Calendar className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                            <h3 className="text-lg font-bold text-gray-900">No {activeTab} bookings</h3>
-                            <p className="text-gray-500 mt-1">Your schedule is clear for now.</p>
+                            <Calendar className="w-8 h-8 text-gray-200 mx-auto mb-3" />
+                            <h3 className="text-sm font-bold text-gray-900">No {activeTab} bookings</h3>
+                            <p className="text-xs text-gray-500 mt-1">Your schedule is clear for now.</p>
                         </motion.div>
                     ) : (
                         filteredAppointments.map((apt) => (
@@ -126,108 +159,118 @@ export function BookingListView({ appointments, onUpdateStatus }: BookingListVie
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
-                                className="bg-white rounded-2xl border border-gray-100 p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group"
+                                className="bg-white rounded-lg border border-slate-100 p-2 shadow-sm hover:shadow-md transition-all relative overflow-hidden group"
                             >
-                                {/* Status Stripe */}
+                                {/* Status Stripe - Slim & Subtle */}
                                 <div className={cn(
-                                    "absolute left-0 top-0 bottom-0 w-1.5",
+                                    "absolute left-0 top-0 bottom-0 w-1",
                                     apt.status === 'pending' && "bg-yellow-400",
                                     apt.status === 'confirmed' && "bg-green-500",
                                     apt.status === 'completed' && "bg-[#6F2DBD]",
                                     (apt.status === 'cancelled' || apt.status === 'declined') && "bg-red-400"
                                 )} />
 
-                                <div className="flex flex-col md:flex-row items-start md:items-center gap-6 pl-2">
+                                <div className="flex items-center gap-3 pl-2 w-full">
 
-                                    {/* Section 1: Time & Date */}
-                                    <div className="min-w-[100px] text-center md:text-left">
-                                        <div className="text-2xl font-black text-gray-900 tracking-tight">
+                                    {/* 1. Time (Fixed Width) */}
+                                    <div className="w-[70px] flex flex-col items-center justify-center shrink-0 leading-tight">
+                                        <div className="text-sm font-bold text-slate-800">
                                             {format(apt.date.toDate(), 'h:mm a')}
                                         </div>
-                                        <div className="flex items-center justify-center md:justify-start gap-1.5 text-gray-500 font-medium text-sm mt-1">
-                                            <Calendar className="w-3.5 h-3.5" />
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase">
                                             {format(apt.date.toDate(), 'MMM d')}
                                         </div>
                                     </div>
 
-                                    {/* Section 2: Customer Profile (Middle) */}
-                                    <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full">
-                                        {/* Avatar */}
-                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-500 font-bold text-lg shrink-0 border-2 border-white shadow-sm">
+                                    {/* Separator */}
+                                    <div className="h-8 w-px bg-slate-100 hidden sm:block" />
+
+                                    {/* 2. Client & Service Info (Flexible) */}
+                                    <div className="flex-1 flex items-center gap-3 min-w-0">
+                                        {/* Avatar (Tiny) */}
+                                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs shrink-0 ring-1 ring-white shadow-sm">
                                             {apt.customerName.charAt(0).toUpperCase()}
                                         </div>
 
-                                        <div className="flex-1 space-y-1">
-                                            <h3 className="font-bold text-gray-900 text-lg leading-none">{apt.customerName}</h3>
-                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                                                <span className="text-[#6F2DBD] font-semibold">{apt.serviceName}</span>
-                                                <span className="text-gray-300 hidden sm:inline">•</span>
-                                                <span className="text-gray-600 font-medium">${apt.price}</span>
+                                        <div className="flex flex-col min-w-0">
+                                            <div className="flex items-center gap-1.5">
+                                                <h3 className="text-sm font-semibold text-slate-900 truncate">
+                                                    {apt.customerName}
+                                                </h3>
+                                                {/* Mobile Price */}
+                                                <span className="sm:hidden text-xs font-medium text-slate-500">
+                                                    • ${apt.price}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 text-xs text-slate-500 truncate">
+                                                <span className="truncate max-w-[120px] sm:max-w-xs">{apt.serviceName}</span>
+                                                <span className="hidden sm:inline text-slate-300">•</span>
+                                                <span className="hidden sm:inline font-medium text-slate-600">${apt.price}</span>
                                             </div>
                                         </div>
-
-                                        {/* Contact Button */}
-                                        <a
-                                            href={`tel:${apt.customerPhone}`}
-                                            className="px-4 py-2 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors border border-green-200"
-                                        >
-                                            <Phone className="w-4 h-4" />
-                                            <span className="hidden sm:inline">Call Client</span>
-                                        </a>
                                     </div>
 
-                                    {/* Section 3: Action Buttons */}
-                                    <div className="flex items-center gap-2 w-full md:w-auto mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-0 border-gray-100">
+                                    {/* 3. Actions (Right Aligned) */}
+                                    <div className="ml-auto flex items-center gap-2 pl-2">
+
+                                        {/* Phone Icon (Always visible) */}
+                                        <a
+                                            href={`tel:${apt.customerPhone}`}
+                                            className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors border border-slate-200"
+                                            title="Call Client"
+                                        >
+                                            <Phone className="w-3.5 h-3.5" />
+                                        </a>
+
+                                        {/* Status Actions */}
                                         {apt.status === 'pending' && (
-                                            <>
+                                            <div className="flex items-center gap-1.5">
                                                 <button
                                                     onClick={() => handleAccept(apt.id, apt.vendorId)}
                                                     disabled={!!processingId}
-                                                    className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 font-bold text-sm shadow-lg shadow-green-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    className="h-7 px-3 bg-green-600 text-white rounded text-xs font-bold shadow-sm hover:bg-green-700 flex items-center gap-1.5 transition-all disabled:opacity-50"
                                                 >
-                                                    {processingId === apt.id ? (
-                                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                                    ) : (
-                                                        <Check className="w-4 h-4" />
-                                                    )}
-                                                    {processingId === apt.id ? "Syncing..." : "Accept"}
+                                                    {processingId === apt.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                                    <span className="hidden sm:inline">Accept</span>
                                                 </button>
                                                 <button
-                                                    onClick={() => onUpdateStatus(apt.id, 'declined')}
+                                                    onClick={() => handleStatusUpdate(apt.id, 'declined')}
                                                     disabled={!!processingId}
-                                                    className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white text-red-500 border border-red-100 rounded-xl hover:bg-red-50 font-bold text-sm transition-all disabled:opacity-50"
+                                                    className="h-7 w-7 sm:w-auto sm:px-3 bg-white text-rose-500 border border-rose-200 rounded text-xs font-bold hover:bg-rose-50 flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+                                                    title="Decline"
                                                 >
-                                                    <X className="w-4 h-4" /> Decline
+                                                    <X className="w-3 h-3" />
                                                 </button>
-                                            </>
-                                        )}
-
-                                        {apt.status === 'confirmed' && (
-                                            <>
-                                                <button
-                                                    onClick={() => onUpdateStatus(apt.id, 'completed')}
-                                                    className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-[#6F2DBD] text-white rounded-xl hover:bg-[#5a2499] font-bold text-sm shadow-lg shadow-purple-200 transition-all"
-                                                >
-                                                    <CheckCircle2 className="w-4 h-4" /> Complete
-                                                </button>
-                                                <button
-                                                    onClick={() => onUpdateStatus(apt.id, 'cancelled')}
-                                                    className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 text-gray-400 hover:text-red-500 font-medium text-sm transition-all"
-                                                >
-                                                    Cancel
-                                                </button>
-                                            </>
-                                        )}
-
-                                        {['completed'].includes(apt.status) && (
-                                            <div className="px-4 py-2 bg-gray-50 text-gray-500 rounded-xl text-sm font-bold border border-gray-200 flex items-center gap-2 cursor-default">
-                                                <CheckCircle2 className="w-4 h-4" /> Completed
                                             </div>
                                         )}
 
-                                        {['cancelled', 'declined'].includes(apt.status) && (
-                                            <div className="px-4 py-2 bg-red-50 text-red-400 rounded-xl text-sm font-bold border border-red-100 flex items-center gap-2 cursor-default">
-                                                <XCircle className="w-4 h-4" /> {apt.status === 'declined' ? 'Declined' : 'Cancelled'}
+                                        {apt.status === 'confirmed' && (
+                                            <div className="flex items-center gap-1.5">
+                                                <button
+                                                    onClick={() => handleStatusUpdate(apt.id, 'completed')}
+                                                    className="h-7 px-3 bg-[#6F2DBD] text-white rounded text-xs font-bold shadow-sm hover:bg-[#5a2499] flex items-center gap-1.5 transition-all"
+                                                >
+                                                    <CheckCircle2 className="w-3 h-3" />
+                                                    <span className="hidden sm:inline">Done</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleStatusUpdate(apt.id, 'cancelled')}
+                                                    className="h-7 w-7 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-all"
+                                                    title="Cancel"
+                                                >
+                                                    <XCircle className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Read Only Status Badges */}
+                                        {['completed', 'cancelled', 'declined'].includes(apt.status) && (
+                                            <div className={cn(
+                                                "h-7 px-3 rounded text-[10px] font-bold uppercase tracking-wider flex items-center border select-none",
+                                                apt.status === 'completed' && "bg-slate-100 text-slate-600 border-slate-200",
+                                                apt.status !== 'completed' && "bg-rose-50 text-rose-500 border-rose-100"
+                                            )}>
+                                                {apt.status}
                                             </div>
                                         )}
                                     </div>

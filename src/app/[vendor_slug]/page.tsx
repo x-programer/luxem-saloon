@@ -147,6 +147,7 @@ export default async function VendorProfilePage({ params }: { params: Promise<{ 
         products: products,
         schedule: vendorData.schedule || {},
         isBookingEnabled: vendorData.isBookingEnabled !== false ? vendorData.isBookingEnabled : false,
+        platformStatus: vendorData.platformStatus || 'active',
         externalLinks: vendorData.externalLinks || []
     };
 

@@ -115,3 +115,26 @@ export async function getAggregatedClients(vendorId: string) {
         throw new Error("Failed to fetch client list.");
     }
 }
+
+export async function deleteClientAction(vendorId: string, appointmentIds: string[]) {
+    if (!vendorId || !appointmentIds.length) return { success: false, error: "Invalid request" };
+
+    try {
+        const batch = adminDb.batch();
+
+        appointmentIds.forEach(id => {
+            const ref = adminDb
+                .collection('users')
+                .doc(vendorId)
+                .collection('appointments')
+                .doc(id);
+            batch.delete(ref);
+        });
+
+        await batch.commit();
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting client data:", error);
+        return { success: false, error: "Failed to delete client data" };
+    }
+}
