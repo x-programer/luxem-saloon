@@ -49,6 +49,13 @@ module.exports = {
                     dark: "#171123", // Midnight
                     surface: "#FBFBFF", // White/Blueish
                 },
+                // DYNAMIC BRANDING
+                brand: {
+                    DEFAULT: "var(--brand-primary)",
+                    soft: "var(--brand-primary-soft)",
+                    hover: "var(--brand-primary-hover)",
+                    foreground: "#FFFFFF",
+                },
             },
             fontFamily: {
                 sans: ["var(--font-sans)", "sans-serif"],

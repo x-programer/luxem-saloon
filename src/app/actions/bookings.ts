@@ -5,6 +5,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { syncBookingToGoogle } from "./calendar-sync";
 import { sendNotification } from "./notifications";
 import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache"; // 👈 Added for cache mgmt
 
 interface BookingData {
     vendorId: string;
@@ -279,5 +280,25 @@ export async function cancelBooking(bookingId: string, vendorId: string) {
     } catch (error: any) {
         console.error("Error cancelling booking:", error);
         throw new Error(error.message || "Failed to cancel booking");
+    }
+}
+
+// 🆕 NEW: Generic Status Update (for any status change)
+export async function updateBookingStatus(bookingId: string, status: string, vendorId: string) {
+    try {
+        if (!bookingId || !vendorId) throw new Error("Missing ID");
+
+        await adminDb
+            .collection('users')
+            .doc(vendorId)
+            .collection('appointments')
+            .doc(bookingId)
+            .update({ status });
+
+        revalidatePath('/dashboard/bookings');
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error updating booking status:", error);
+        throw new Error("Failed to update status");
     }
 }

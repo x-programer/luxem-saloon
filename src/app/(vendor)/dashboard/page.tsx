@@ -4,62 +4,59 @@ import { useAuth } from "@/lib/auth-context";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-    LayoutDashboard, Scissors, Calendar, Users, ShoppingBag,
-    Star, Image as ImageIcon, Briefcase, Eye, DollarSign,
-    AlertTriangle, X, LogOut, Search, Bell, ExternalLink,
-    Store, Menu, Settings, Plus
+    Calendar, Eye, DollarSign, TrendingUp, Users, ArrowRight, ExternalLink
 } from "lucide-react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
+import { motion } from "framer-motion";
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import Link from "next/link";
+import { format } from "date-fns";
 
 // --- Components ---
 
-const SidebarItem = ({ icon: Icon, label, isActive, onClick }: any) => (
-    <button
-        onClick={onClick}
-        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative overflow-hidden ${isActive
-            ? "bg-slate-900 text-white shadow-lg shadow-slate-900/20"
-            : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-            }`}
+const StatsCard = ({ icon: Icon, label, value, trend, colorClass, delay }: any) => (
+    <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay, duration: 0.4 }}
+        className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-lg hover:border-violet-100 transition-all duration-300 group"
     >
-        <Icon className={`w-5 h-5 ${isActive ? "text-white" : "text-slate-400 group-hover:text-slate-900"}`} />
-        <span className="font-medium text-sm">{label}</span>
-    </button>
-);
-
-const StatsCard = ({ icon: Icon, label, value, trend, colorClass }: any) => (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-all duration-200">
         <div className="flex items-center justify-between mb-4">
-            <div className={`p-3 rounded-xl ${colorClass.bg}`}>
+            <div className={`p-3 rounded-xl transition-colors ${colorClass.bg} group-hover:scale-110 duration-300`}>
                 <Icon className={`w-6 h-6 ${colorClass.text}`} />
             </div>
             {trend && (
-                <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                <span className="text-xs font-bold bg-green-50 text-green-700 px-2 py-1 rounded-full border border-green-100 flex items-center gap-1">
+                    <TrendingUp className="w-3 h-3" />
                     {trend}
                 </span>
             )}
         </div>
-        <div className="text-3xl font-bold text-slate-900">{value}</div>
+        <div className="text-3xl font-black text-slate-900 tracking-tight">{value}</div>
         <div className="text-sm text-slate-500 mt-1 font-medium">{label}</div>
-    </div>
+    </motion.div>
 );
 
 export default function VendorDashboardPage() {
-    const { user, role, loading, logout } = useAuth();
+    const { user, role, loading } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
     const impersonateId = searchParams.get('impersonate');
 
-    // Layout State
-    const [activeTab, setActiveTab] = useState('dashboard');
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
     // Data State
     const [viewedUser, setViewedUser] = useState<any>(null);
-    const [isImpersonating, setIsImpersonating] = useState(false);
-    const [dataLoading, setDataLoading] = useState(true);
+    const [dashboardStats, setDashboardStats] = useState({
+        earnings: 0,
+        appointments: 0,
+        activeAppointments: 0,
+        clients: 0,
+        views: 0,
+        chartData: [] as any[]
+    });
+    const [isLoadingData, setIsLoadingData] = useState(true);
 
-    // --- 1. Access Control & "God Mode" Logic ---
+    // --- Access Control & Data Fetching ---
     useEffect(() => {
         const initDashboard = async () => {
             if (loading) return;
@@ -69,311 +66,326 @@ export default function VendorDashboardPage() {
                 return;
             }
 
-            setDataLoading(true);
+            let targetUid = user.uid;
 
-            // Admin Impersonation
+            // Admin Impersonation Logic
             if (role === 'admin' && impersonateId) {
-                setIsImpersonating(true);
-                try {
-                    const targetDoc = await getDoc(doc(db, "users", impersonateId));
-                    if (targetDoc.exists()) {
-                        setViewedUser({ uid: targetDoc.id, ...targetDoc.data() });
-                    } else {
-                        console.error("Target user not found");
-                        setViewedUser({ displayName: "Unknown User" });
-                    }
-                } catch (err) {
-                    console.error("Error fetching target", err);
-                }
-            }
-            // Access Check
-            else if (role !== 'vendor' && role !== 'admin') {
+                targetUid = impersonateId;
+            } else if (role !== 'vendor' && role !== 'admin') {
                 router.push('/my-bookings');
                 return;
             }
-            // Normal Vendor View
-            else {
-                setViewedUser(user);
+
+            try {
+                // 1. Fetch User Profile
+                const userDoc = await getDoc(doc(db, "users", targetUid));
+                if (userDoc.exists()) {
+                    setViewedUser({ uid: userDoc.id, ...userDoc.data() });
+                } else {
+                    setViewedUser({ displayName: "Unknown User", uid: targetUid });
+                }
+
+                // 2. Fetch Dashboard Stats (DATA SOURCE CHANGE to 'appointments' subcollection)
+                // Note: We are fetching from the subcollection 'appointments' under the user doc.
+                // We do NOT need a 'where("vendorId", "==", targetUid)' clause because we are already inside the user's document.
+                const bookingsQuery = collection(db, "users", targetUid, "appointments");
+
+                const bookingsSnap = await getDocs(bookingsQuery);
+                const bookings = bookingsSnap.docs.map(d => d.data());
+
+                // Debugging Log as needed
+                console.log("Raw Appointments:", bookings);
+
+                // Helper for Safe Date Parsing (Handles Firestore Timestamps & Strings)
+                const safeDate = (value: any) => {
+                    if (!value) return new Date();
+                    // Handle Firestore Timestamp (has .toDate() method)
+                    if (value && typeof value.toDate === 'function') {
+                        return value.toDate();
+                    }
+                    // Handle standard Date string/number
+                    return new Date(value);
+                };
+
+                // Client-side Sorting
+                const sortedBookings = bookings.sort((a: any, b: any) => {
+                    const dateA = a.date ? safeDate(a.date).getTime() : 0;
+                    const dateB = b.date ? safeDate(b.date).getTime() : 0;
+                    return dateA - dateB;
+                });
+
+                // --- ROBUST STATS CALCULATION ---
+                let totalEarnings = 0;
+                let activeCount = 0;
+                const uniqueClients = new Set();
+                const chartMap = new Map();
+
+                sortedBookings.forEach((b: any) => {
+                    // Normalize Data
+                    const status = (b.status || '').toLowerCase().trim();
+                    const rawPrice = b.price ? b.price.toString() : '0';
+                    const price = parseFloat(rawPrice.replace(/[^0-9.]/g, '')) || 0;
+
+                    // 1. Total Revenue Check (Completed/Paid)
+                    if (['completed', 'done', 'paid', 'finished'].includes(status)) {
+                        totalEarnings += price;
+
+                        // Add to chart map (only revenue generating ones)
+                        const dateKey = b.date ? format(safeDate(b.date), 'MMM d') : 'N/A';
+                        const currentVal = chartMap.get(dateKey) || 0;
+                        chartMap.set(dateKey, currentVal + price);
+                    }
+
+                    // 2. Active Bookings Check
+                    if (['pending', 'confirmed', 'scheduled', 'upcoming', 'accept'].includes(status)) {
+                        activeCount += 1;
+                    }
+
+                    // 3. Unique Clients Check
+                    if (b.customerId) {
+                        uniqueClients.add(b.customerId);
+                    }
+                });
+
+                // Process Chart Data from Map
+                const chartData = Array.from(chartMap.entries()).map(([date, revenue]) => ({
+                    date,
+                    revenue
+                }));
+
+                // Fallback for empty chart
+                if (chartData.length === 0) {
+                    chartData.push({ date: 'Today', revenue: 0 });
+                }
+
+                // Chart Data Sort (Ensure chart days are ordered)
+                // We need to parse the 'MMM d' string back or use our original map keys if we kept them as timestamps
+                // For simplicity, let's just reverse if they came out backwards, but Array.from on Map keeps insertion order 
+                // and we sorted bookings first, so insertion order should be correct.
+
+                // One missing part: bookings.slice(-10) logic? 
+                // The previous code had `sortedBookings.slice(-10)`. The current logic processes ALL bookings.
+                // If we want to limit to last 10 days, we should slice the chartData.
+                const finalChartData = chartData.length > 7 ? chartData.slice(-7) : chartData;
+
+                setDashboardStats({
+                    earnings: totalEarnings,
+                    appointments: sortedBookings.length,
+                    activeAppointments: activeCount,
+                    clients: uniqueClients.size,
+                    views: 0,
+                    chartData: finalChartData
+                });
+
+            } catch (error) {
+                console.error("Dashboard data fetch error:", error);
+            } finally {
+                setIsLoadingData(false);
             }
-            setDataLoading(false);
         };
 
         initDashboard();
     }, [user, role, loading, impersonateId, router]);
 
-    const handleLogout = async () => {
-        try {
-            await logout();
-            router.push('/login');
-        } catch (error) {
-            console.error("Logout failed", error);
-        }
-    };
-
-    if (loading || dataLoading || !viewedUser) {
+    if (loading || isLoadingData || !viewedUser) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-50">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div>
-                    <p className="text-sm text-slate-500 animate-pulse">Loading Workspace...</p>
-                </div>
+            <div className="min-h-[60vh] flex items-center justify-center">
+                <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                    className="w-12 h-12 border-4 border-violet-200 border-t-violet-600 rounded-full"
+                />
             </div>
         );
     }
 
-    // --- 2. Render Content based on Tab ---
-    const renderContent = () => {
-        switch (activeTab) {
-            case 'dashboard':
-                return (
-                    <div className="space-y-8 animate-in fade-in duration-500">
-                        <div>
-                            <h1 className="text-2xl font-bold text-slate-900">Overview</h1>
-                            <p className="text-slate-500">Welcome back, {viewedUser.businessName || viewedUser.displayName || 'Partner'}</p>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <StatsCard
-                                icon={Calendar}
-                                label="Total Bookings"
-                                value={viewedUser.stats?.totalBookings || '0'}
-                                trend={viewedUser.stats?.totalBookings > 0 ? "+12%" : null}
-                                colorClass={{ bg: 'bg-purple-50', text: 'text-purple-600' }}
-                            />
-                            <StatsCard
-                                icon={DollarSign}
-                                label="Total Revenue"
-                                value={`$${viewedUser.stats?.totalRevenue?.toLocaleString() || '0.00'}`}
-                                trend={viewedUser.stats?.totalRevenue > 0 ? "+8%" : null}
-                                colorClass={{ bg: 'bg-blue-50', text: 'text-blue-600' }}
-                            />
-                            <StatsCard
-                                icon={Eye}
-                                label="Profile Views"
-                                value={viewedUser.stats?.views || '0'}
-                                trend="+24%"
-                                colorClass={{ bg: 'bg-indigo-50', text: 'text-indigo-600' }}
-                            />
-                        </div>
-
-                        {/* Recent Activity */}
-                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center min-h-[400px] flex flex-col items-center justify-center">
-                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                                <Calendar className="w-8 h-8 text-slate-300" />
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-900">No recent activity</h3>
-                            <p className="text-slate-500 max-w-sm mt-2">
-                                Your recent bookings will appear here once customers start scheduling appointments.
-                            </p>
-                        </div>
-                    </div>
-                );
-            case 'services':
-                // ✅ SERVICES TAB
-                return (
-                    <div className="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center min-h-[60vh] flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-6">
-                            <Scissors className="w-10 h-10" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-slate-900">Services Menu</h2>
-                        <p className="text-slate-500 mt-2 max-w-md mx-auto">
-                            Manage your service list, pricing, and durations here.
-                        </p>
-                        <button className="mt-8 flex items-center gap-2 px-6 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 active:scale-95">
-                            <Plus className="w-5 h-5" />
-                            Add Your First Service
-                        </button>
-                    </div>
-                );
-            case 'bookings':
-                // ✅ BOOKINGS TAB
-                return (
-                    <div className="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center min-h-[60vh] flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="w-20 h-20 bg-purple-50 text-purple-500 rounded-full flex items-center justify-center mb-6">
-                            <Calendar className="w-10 h-10" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-slate-900">Bookings Calendar</h2>
-                        <p className="text-slate-500 mt-2 max-w-md mx-auto">
-                            View upcoming appointments and manage your schedule.
-                        </p>
-                        <div className="mt-8 flex gap-3">
-                            <button className="px-6 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors">
-                                Sync Google Calendar
-                            </button>
-                            <button className="px-6 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-colors shadow-lg">
-                                + New Appointment
-                            </button>
-                        </div>
-                    </div>
-                );
-            case 'settings':
-                // ✅ SETTINGS TAB (RESTORED)
-                return (
-                    <div className="space-y-6 animate-in fade-in duration-500">
-                        <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
-                            <h2 className="text-xl font-bold text-slate-900 mb-6">Business Settings</h2>
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-bold text-slate-700">Business Name</label>
-                                        <input type="text" className="w-full p-3 rounded-lg border border-slate-200 bg-slate-50" placeholder="Luxe Salon" defaultValue={viewedUser.businessName} />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-bold text-slate-700">Phone Number</label>
-                                        <input type="text" className="w-full p-3 rounded-lg border border-slate-200 bg-slate-50" placeholder="+1 234 567 890" />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-slate-700">Bio / Description</label>
-                                    <textarea className="w-full p-3 rounded-lg border border-slate-200 bg-slate-50 h-32" placeholder="Tell customers about your salon..." />
-                                </div>
-                                <div className="pt-4">
-                                    <button className="px-6 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
-                                        Save Changes
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                );
-            default:
-                return (
-                    <div className="flex flex-col items-center justify-center h-[60vh] text-center animate-in fade-in zoom-in-95 duration-300">
-                        <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-6">
-                            <Briefcase className="w-10 h-10 text-slate-400" />
-                        </div>
-                        <h2 className="text-xl font-bold text-slate-900 capitalize">{activeTab}</h2>
-                        <p className="text-slate-500 mt-2 max-w-md">
-                            This feature is currently under development.
-                        </p>
-                    </div>
-                );
-        }
-    };
-
     return (
-        <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900 relative">
-
-            {/* MOBILE OVERLAY */}
-            {isMobileMenuOpen && (
+        <div className="space-y-8 pb-12">
+            {/* Hero Section */}
+            <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
+                className="relative w-full h-64 md:h-80 rounded-3xl overflow-hidden shadow-xl"
+            >
+                {/* Background Image */}
                 <div
-                    className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm"
-                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="absolute inset-0 bg-cover bg-center"
+                    style={{
+                        backgroundImage: `url(${viewedUser.banner || 'https://images.unsplash.com/photo-1600948836101-f9ffda59d250?auto=format&fit=crop&q=80'})`
+                    }}
                 />
-            )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
-            {/* SIDEBAR */}
-            <aside className={`
-                fixed top-0 left-0 h-screen w-64 bg-white border-r border-slate-200 z-50 flex flex-col transition-transform duration-300 ease-in-out
-                ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0
-            `}>
-                {/* Logo */}
-                <div className="h-20 flex items-center px-6 border-b border-slate-50 justify-between">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-md">
-                            L
-                        </div>
-                        <span className="font-bold text-slate-900 text-lg tracking-tight">Luxe<span className="text-slate-400 font-normal">Salon</span></span>
-                    </div>
-                    <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden p-1 text-slate-400">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                {/* Live Shop Button */}
-                <div className="px-4 pt-6 pb-2">
-                    <button
-                        onClick={() => window.open(`/shop/${viewedUser.uid}`, '_blank')}
-                        className="w-full flex items-center justify-between px-4 py-3 bg-purple-50 text-purple-700 rounded-xl font-bold text-sm hover:bg-purple-100 transition-colors border border-purple-100"
-                    >
-                        <div className="flex items-center gap-2">
-                            <Store className="w-4 h-4" />
-                            Live Shop
-                        </div>
-                        <ExternalLink className="w-3 h-3 opacity-50" />
-                    </button>
-                </div>
-
-                {/* Nav Items */}
-                <div className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar">
-                    <SidebarItem icon={LayoutDashboard} label="Dashboard" isActive={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} />
-                    <SidebarItem icon={Scissors} label="Services" isActive={activeTab === 'services'} onClick={() => { setActiveTab('services'); setIsMobileMenuOpen(false); }} />
-                    <SidebarItem icon={Calendar} label="Bookings" isActive={activeTab === 'bookings'} onClick={() => { setActiveTab('bookings'); setIsMobileMenuOpen(false); }} />
-                    <SidebarItem icon={Users} label="Clients" isActive={activeTab === 'clients'} onClick={() => { setActiveTab('clients'); setIsMobileMenuOpen(false); }} />
-                    <SidebarItem icon={Briefcase} label="My Team" isActive={activeTab === 'team'} onClick={() => { setActiveTab('team'); setIsMobileMenuOpen(false); }} />
-                    <SidebarItem icon={ShoppingBag} label="Products" isActive={activeTab === 'products'} onClick={() => { setActiveTab('products'); setIsMobileMenuOpen(false); }} />
-                    <SidebarItem icon={Settings} label="Settings" isActive={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
-                </div>
-
-                {/* Profile / Logout */}
-                <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-                    <div className="flex items-center gap-3 p-2 mb-2">
-                        <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold border-2 border-white shadow-sm">
-                            {(viewedUser?.displayName?.[0] || 'V').toUpperCase()}
-                        </div>
-                        <div className="flex-1 overflow-hidden">
-                            <div className="text-xs font-bold text-slate-900 truncate">{viewedUser?.displayName || 'Vendor'}</div>
-                            <div className="text-[10px] text-slate-500 truncate uppercase tracking-wider font-semibold">Vendor Account</div>
-                        </div>
-                    </div>
-                    <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                        <LogOut className="w-3 h-3" />
-                        Sign Out
-                    </button>
-                </div>
-            </aside>
-
-            {/* MAIN CONTENT */}
-            <main className="flex-1 md:ml-64 min-h-screen flex flex-col transition-all duration-300">
-                {/* Header */}
-                <header className="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200 sticky top-0 z-40 px-4 md:px-8 flex items-center justify-between">
-                    <button
-                        className="md:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg"
-                        onClick={() => setIsMobileMenuOpen(true)}
-                    >
-                        <Menu className="w-6 h-6" />
-                    </button>
-
-                    <div className="hidden md:block relative w-96">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                        <input
-                            placeholder="Search bookings, clients..."
-                            className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all placeholder:text-slate-400"
-                        />
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <button className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-full relative transition-colors">
-                            <Bell className="w-5 h-5" />
-                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-                        </button>
-                    </div>
-                </header>
-
-                {/* Admin Banner */}
-                {isImpersonating && (
-                    <div className="bg-amber-100 border-b border-amber-200 px-4 md:px-8 py-3 flex flex-col md:flex-row items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 text-amber-900 text-sm font-bold">
-                            <AlertTriangle className="w-4 h-4" />
-                            Viewing Dashboard as {viewedUser?.displayName} (Admin Mode)
-                        </div>
-                        <button
-                            onClick={() => router.push('/admin/users')}
-                            className="text-xs bg-white/50 hover:bg-white text-amber-900 px-3 py-1 rounded-md font-bold transition-colors shadow-sm"
+                {/* Content Overlay */}
+                <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10 flex flex-col md:flex-row items-end md:items-center justify-between gap-6">
+                    <div className="flex items-center gap-6">
+                        <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+                            className="w-24 h-24 md:w-28 md:h-28 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-gray-200"
                         >
-                            Exit View
+                            {viewedUser.logo || viewedUser.photoURL ? (
+                                <img src={viewedUser.logo || viewedUser.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-violet-600 text-white text-3xl font-bold">
+                                    {(viewedUser.displayName?.[0] || 'V').toUpperCase()}
+                                </div>
+                            )}
+                        </motion.div>
+                        <div className="text-white mb-2">
+                            <motion.h1
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: 0.3 }}
+                                className="text-3xl md:text-4xl font-black tracking-tight"
+                            >
+                                {viewedUser.businessName || viewedUser.displayName}
+                            </motion.h1>
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.4 }}
+                                className="flex items-center gap-2 text-white/80 text-sm font-medium"
+                            >
+                                <span>@{viewedUser.slug || viewedUser.uid?.slice(0, 8)}</span>
+                                <span className="w-1 h-1 rounded-full bg-white/50" />
+                                <span>{viewedUser.role === 'admin' ? 'Administrator' : 'Partner Vendor'}</span>
+                            </motion.div>
+                        </div>
+                    </div>
+
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                            const finalUrl = viewedUser.slug
+                                ? `${window.location.origin}/${viewedUser.slug}`
+                                : `${window.location.origin}/shop/${viewedUser.uid}`;
+                            window.open(finalUrl, '_blank');
+                        }}
+                        className="bg-white/10 backdrop-blur-md border border-white/20 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-white/20 transition-all"
+                    >
+                        Visit Storefront <ExternalLink className="w-4 h-4" />
+                    </motion.button>
+                </div>
+            </motion.div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <StatsCard
+                    icon={DollarSign}
+                    label="Total Revenue"
+                    value={`$${dashboardStats.earnings.toLocaleString()}`}
+                    trend="+12%"
+                    colorClass={{ bg: 'bg-emerald-50', text: 'text-emerald-600' }}
+                    delay={0.1}
+                />
+                <StatsCard
+                    icon={Calendar}
+                    label="Active Bookings"
+                    value={dashboardStats.activeAppointments}
+                    trend={dashboardStats.appointments > 0 ? `${dashboardStats.appointments} total` : "0 total"}
+                    colorClass={{ bg: 'bg-violet-50', text: 'text-violet-600' }}
+                    delay={0.2}
+                />
+                <StatsCard
+                    icon={Users}
+                    label="Total Clients"
+                    value={dashboardStats.clients}
+                    trend="All Time"
+                    colorClass={{ bg: 'bg-blue-50', text: 'text-blue-600' }}
+                    delay={0.3}
+                />
+            </div>
+
+            {/* Charts & Activity Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Chart */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm"
+                >
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-xl font-bold text-slate-900">Revenue Overview</h3>
+                            <p className="text-slate-500 text-sm">Income trend over time</p>
+                        </div>
+                    </div>
+                    <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={dashboardStats.chartData}>
+                                <defs>
+                                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <XAxis
+                                    dataKey="date"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#94a3b8', fontSize: 12 }}
+                                />
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#94a3b8', fontSize: 12 }}
+                                    tickFormatter={(value) => `$${value}`}
+                                />
+                                <Tooltip
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.1)' }}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="revenue"
+                                    stroke="#8b5cf6"
+                                    strokeWidth={3}
+                                    fillOpacity={1}
+                                    fill="url(#colorRevenue)"
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </motion.div>
+
+                {/* Quick Actions / Recent */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="bg-violet-900 rounded-3xl p-8 text-white flex flex-col justify-between relative overflow-hidden"
+                >
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-violet-500/20 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+
+                    <div className="relative z-10">
+                        <h3 className="text-2xl font-bold mb-2">Upgrade to Pro</h3>
+                        <p className="text-violet-200 mb-8">Unlock advanced analytics, marketing tools, and zero commission fees.</p>
+
+                        <button className="w-full py-4 bg-white text-violet-900 rounded-xl font-bold hover:bg-violet-50 transition-colors shadow-lg">
+                            View Plans
                         </button>
                     </div>
-                )}
 
-                {/* Dynamic Content */}
-                <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
-                    {renderContent()}
-                </div>
-            </main>
-        </div>
+                    <div className="mt-8 pt-8 border-t border-white/10 relative z-10">
+                        <h4 className="font-bold mb-4 flex items-center gap-2">
+                            <Eye className="w-4 h-4 text-violet-300" />
+                            Quick Views
+                        </h4>
+                        <Link href="/dashboard/bookings" className="flex items-center justify-between py-3 hover:bg-white/5 rounded-lg px-2 -mx-2 transition-colors group">
+                            <span className="text-violet-100">Pending Bookings</span>
+                            <ArrowRight className="w-4 h-4 text-violet-300 group-hover:translate-x-1 transition-transform" />
+                        </Link>
+                        <Link href="/dashboard/services" className="flex items-center justify-between py-3 hover:bg-white/5 rounded-lg px-2 -mx-2 transition-colors group">
+                            <span className="text-violet-100">Manage Services</span>
+                            <ArrowRight className="w-4 h-4 text-violet-300 group-hover:translate-x-1 transition-transform" />
+                        </Link>
+                    </div>
+                </motion.div>
+            </div>
+        </div >
     );
 }

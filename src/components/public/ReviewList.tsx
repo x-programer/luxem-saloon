@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { Star, Trash2, User } from "lucide-react";
-import { useAuth } from "@/lib/auth-context"; // Assuming client-side auth context helps identify currentUser
-import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase/config";
-import { addReview, deleteReview } from "@/app/actions/review-actions";
+import { useAuth } from "@/lib/auth-context";
+import { addReview, deleteReview, getVendorReviews } from "@/app/actions/review-actions";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -24,18 +22,22 @@ export function ReviewList({ vendorId }: ReviewListProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        const q = query(
-            collection(db, "reviews"),
-            where("vendorId", "==", vendorId),
-            orderBy("createdAt", "desc")
-        );
+        if (!vendorId) return;
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            setReviews(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            setLoading(false);
-        });
+        const fetchReviews = async () => {
+            console.log("🟢 ReviewList: Starting fetch for", vendorId);
+            try {
+                const fetchedReviews = await getVendorReviews(vendorId);
+                console.log("✅ ReviewList: Fetched count", fetchedReviews.length);
+                setReviews(fetchedReviews);
+            } catch (error) {
+                console.error("Failed to load reviews:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
 
-        return () => unsubscribe();
+        fetchReviews();
     }, [vendorId]);
 
     const handleAddReview = async (e: React.FormEvent) => {
@@ -49,7 +51,7 @@ export function ReviewList({ vendorId }: ReviewListProps) {
         const result = await addReview({
             vendorId,
             customerId: user.uid,
-            customerName: user.email?.split('@')[0] || "Customer", // Fallback name
+            customerName: user.email?.split('@')[0] || "Customer",
             rating,
             comment
         });
@@ -58,6 +60,9 @@ export function ReviewList({ vendorId }: ReviewListProps) {
             toast.success("Review posted!");
             setComment("");
             setRating(5);
+            // Refresh reviews manually
+            const newReviews = await getVendorReviews(vendorId);
+            setReviews(newReviews);
         } else {
             toast.error(result.error || "Failed to post review");
         }
@@ -71,6 +76,9 @@ export function ReviewList({ vendorId }: ReviewListProps) {
         const result = await deleteReview(reviewId, user.uid);
         if (result.success) {
             toast.success("Review deleted");
+            // Refresh reviews manually
+            const newReviews = await getVendorReviews(vendorId);
+            setReviews(newReviews);
         } else {
             toast.error(result.error || "Delete failed");
         }
@@ -78,7 +86,7 @@ export function ReviewList({ vendorId }: ReviewListProps) {
 
     return (
         <div className="space-y-10">
-            {/* Add Review Form (Only if logged in) */}
+            {/* Add Review Form */}
             {user && (
                 <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
                     <h3 className="font-bold text-gray-900 mb-4">Write a Review</h3>
@@ -91,9 +99,7 @@ export function ReviewList({ vendorId }: ReviewListProps) {
                                     onClick={() => setRating(star)}
                                     className="transition-transform hover:scale-110 focus:outline-none"
                                 >
-                                    <Star
-                                        className={`w-8 h-8 ${star <= rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
-                                    />
+                                    <Star className={`w-8 h-8 ${star <= rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
                                 </button>
                             ))}
                         </div>
@@ -133,40 +139,27 @@ export function ReviewList({ vendorId }: ReviewListProps) {
                             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center font-bold text-gray-500 shrink-0">
                                 {review.customerName?.[0]?.toUpperCase() || <User className="w-6 h-6" />}
                             </div>
-
                             <div className="flex-1 space-y-2">
                                 <div className="flex justify-between items-start">
                                     <div>
                                         <h4 className="font-bold text-gray-900">{review.customerName}</h4>
                                         <div className="text-xs text-gray-400 flex items-center gap-2">
-                                            {review.createdAt ? formatDistanceToNow(review.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
+                                            {/* Date Parse Logic Updated for ISO String */}
+                                            {review.createdAt ? formatDistanceToNow(new Date(review.createdAt), { addSuffix: true }) : 'Just now'}
                                         </div>
                                     </div>
-
-                                    {/* Delete Button (Conditional) */}
                                     {user && (user.uid === review.customerId || user.uid === vendorId) && (
-                                        <button
-                                            onClick={() => handleDelete(review.id)}
-                                            className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100"
-                                            title="Delete Review"
-                                        >
+                                        <button onClick={() => handleDelete(review.id)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100">
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     )}
                                 </div>
-
                                 <div className="flex gap-0.5">
                                     {[...Array(5)].map((_, i) => (
-                                        <Star
-                                            key={i}
-                                            className={`w-4 h-4 ${i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-200"}`}
-                                        />
+                                        <Star key={i} className={`w-4 h-4 ${i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-200"}`} />
                                     ))}
                                 </div>
-
-                                <p className="text-gray-600 leading-relaxed text-sm">
-                                    {review.comment}
-                                </p>
+                                <p className="text-gray-600 leading-relaxed text-sm">{review.comment}</p>
                             </div>
                         </div>
                     ))

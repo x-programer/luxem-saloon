@@ -122,3 +122,39 @@ export async function deleteReview(reviewId: string, userId: string) {
         return { success: false, error: "Failed to delete review" };
     }
 }
+
+export async function getVendorReviews(vendorId: string) {
+    try {
+        if (!vendorId) return [];
+
+        // Use Admin SDK to bypass permissions
+        const { adminDb } = await import("@/lib/firebase/admin");
+
+        const snapshot = await adminDb
+            .collection("reviews")
+            .where("vendorId", "==", vendorId)
+            .get();
+
+        const reviews = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                // Serialize Timestamp for client to ISO String
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : null
+            };
+        });
+
+        // Sort in memory (newest first)
+        reviews.sort((a: any, b: any) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return timeB - timeA;
+        });
+
+        return reviews;
+    } catch (error) {
+        console.error("Error fetching reviews:", error);
+        return [];
+    }
+}

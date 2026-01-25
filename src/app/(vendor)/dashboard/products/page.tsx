@@ -2,9 +2,9 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase/config";
-import { collection, onSnapshot, addDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc } from "firebase/firestore";
 import { useEffect, useState } from "react";
-import { Plus, Trash2, ShoppingBag, Store } from "lucide-react";
+import { Plus, Trash2, ShoppingBag, Store, Pencil, X } from "lucide-react";
 import { ImageUploader } from "@/components/dashboard/ImageUploader";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,8 +17,10 @@ export default function ProductsPage() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<ProductType>("retail");
 
-    // Modal
+    // Modal & Form State
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null); // Track if editing
+
     const [name, setName] = useState("");
     const [brand, setBrand] = useState("");
     const [description, setDescription] = useState("");
@@ -33,27 +35,43 @@ export default function ProductsPage() {
         const unsubscribe = onSnapshot(collection(db, "users", user.uid, "products"), (snap) => {
             setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
+        }, (error) => {
+            console.error("Error fetching products", error);
+            setLoading(false);
         });
         return () => unsubscribe();
     }, [user]);
 
-    const handleAddProduct = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user) return;
         setIsSubmitting(true);
+
+        const payload = {
+            name, brand, description,
+            price: type === 'retail' ? parseFloat(price) : null,
+            purchaseLink: link,
+            image, type,
+            updatedAt: new Date()
+        };
+
         try {
-            await addDoc(collection(db, "users", user.uid, "products"), {
-                name, brand, description,
-                price: type === 'retail' ? parseFloat(price) : null,
-                purchaseLink: link,
-                image, type,
-                createdAt: new Date()
-            });
-            toast.success("Product added");
-            setIsModalOpen(false);
-            resetForm();
+            if (editingId) {
+                // Update Existing
+                await updateDoc(doc(db, "users", user.uid, "products", editingId), payload);
+                toast.success("Product updated successfully");
+            } else {
+                // Create New
+                await addDoc(collection(db, "users", user.uid, "products"), {
+                    ...payload,
+                    createdAt: new Date()
+                });
+                toast.success("Product added successfully");
+            }
+            closeModal();
         } catch (error) {
-            toast.error("Failed to add product");
+            console.error(error);
+            toast.error(editingId ? "Failed to update" : "Failed to add product");
         }
         setIsSubmitting(false);
     };
@@ -68,8 +86,27 @@ export default function ProductsPage() {
         }
     };
 
+    const handleEdit = (product: any) => {
+        setEditingId(product.id);
+        setName(product.name);
+        setBrand(product.brand);
+        setDescription(product.description || "");
+        setPrice(product.price ? product.price.toString() : "");
+        setLink(product.purchaseLink || "");
+        setImage(product.image || "");
+        setType(product.type || "retail");
+        setIsModalOpen(true);
+    };
+
+    const closeModal = () => {
+        setIsModalOpen(false);
+        setEditingId(null);
+        resetForm();
+    };
+
     const resetForm = () => {
         setName(""); setBrand(""); setDescription(""); setPrice(""); setLink(""); setImage("");
+        setEditingId(null);
     };
 
     const filteredProducts = products.filter(p => p.type === activeTab);
@@ -84,8 +121,8 @@ export default function ProductsPage() {
                     <p className="text-gray-500 mt-1">Manage retail items and salon supplies.</p>
                 </div>
                 <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-2 bg-[#6F2DBD] text-white px-4 py-2 rounded-xl font-bold hover:bg-[#5a2499] transition-all shadow-lg hover:shadow-[#6F2DBD]/30"
+                    onClick={() => { resetForm(); setIsModalOpen(true); }}
+                    className="flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-xl font-bold hover:bg-brand-hover transition-all shadow-lg hover:shadow-brand/30"
                 >
                     <Plus className="w-5 h-5" /> Add Product
                 </button>
@@ -110,49 +147,64 @@ export default function ProductsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {filteredProducts.map((product) => (
                     <div key={product.id} className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm group hover:shadow-md transition-shadow relative">
-                        <button
-                            onClick={() => handleDelete(product.id)}
-                            className="absolute top-4 right-4 z-10 p-2 bg-white/80 backdrop-blur-sm rounded-full text-gray-400 hover:text-red-500 transition-colors shadow-sm"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
+                        {/* Actions */}
+                        <div className="absolute top-4 right-4 z-10 flex gap-2">
+                            <button
+                                onClick={() => handleEdit(product)}
+                                className="p-2 bg-white/90 backdrop-blur-sm rounded-full text-blue-500 hover:text-blue-600 transition-colors shadow-sm hover:scale-105"
+                                title="Edit"
+                            >
+                                <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                                onClick={() => handleDelete(product.id)}
+                                className="p-2 bg-white/90 backdrop-blur-sm rounded-full text-gray-400 hover:text-red-500 transition-colors shadow-sm hover:scale-105"
+                                title="Delete"
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
 
-                        <div className="aspect-square rounded-2xl bg-gray-50 mb-4 overflow-hidden relative">
+                        <div className="aspect-square rounded-2xl bg-gray-50 mb-4 overflow-hidden relative group-hover:scale-[1.02] transition-transform duration-500">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={product.image || "https://source.unsplash.com/random/300x300/?product"} alt={product.name} className="w-full h-full object-cover" />
                             {product.type === 'retail' && (
-                                <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-md text-white text-xs font-bold px-2 py-1 rounded-lg">
+                                <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-md text-white text-xs font-bold px-2 py-1 rounded-lg border border-white/20">
                                     ${product.price}
                                 </div>
                             )}
                         </div>
 
                         <div className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">{product.brand}</div>
-                        <h3 className="font-bold text-gray-900 leading-tight mb-2 truncate">{product.name}</h3>
+                        <h3 className="font-bold text-gray-900 leading-tight mb-2 truncate" title={product.name}>{product.name}</h3>
                         {product.purchaseLink && (
-                            <a href={product.purchaseLink} target="_blank" className="text-xs text-[#6F2DBD] hover:underline block truncate">
-                                {product.purchaseLink}
+                            <a href={product.purchaseLink} target="_blank" className="text-xs text-brand hover:underline block truncate opacity-80 hover:opacity-100">
+                                {product.purchaseLink.replace(/^https?:\/\//, '')}
                             </a>
                         )}
                     </div>
                 ))}
             </div>
 
-            {/* Add Product Modal */}
+            {/* Modal */}
             <AnimatePresence>
                 {isModalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                         <motion.div
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-                            onClick={() => setIsModalOpen(false)}
+                            onClick={closeModal}
                         />
                         <motion.div
                             initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                            className="relative bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto"
+                            className="relative bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto z-10"
                         >
-                            <h2 className="text-2xl font-bold mb-6">Add Product</h2>
-                            <form onSubmit={handleAddProduct} className="space-y-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold">{editingId ? 'Edit Product' : 'Add Product'}</h2>
+                                <button onClick={closeModal} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X className="w-5 h-5 text-gray-500" /></button>
+                            </div>
+
+                            <form onSubmit={handleSubmit} className="space-y-6">
                                 <div className="flex justify-center">
                                     <ImageUploader
                                         directory="products"
@@ -166,24 +218,30 @@ export default function ProductsPage() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="col-span-2">
                                         <label className="text-sm font-bold text-gray-700 block mb-2">Product Type</label>
-                                        <div className="flex gap-4">
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input type="radio" checked={type === 'retail'} onChange={() => setType('retail')} name="type" className="text-[#6F2DBD]" />
-                                                <span className="text-sm font-medium">Retail (For Sale)</span>
-                                            </label>
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input type="radio" checked={type === 'salon_use'} onChange={() => setType('salon_use')} name="type" className="text-[#6F2DBD]" />
-                                                <span className="text-sm font-medium">Salon Use</span>
-                                            </label>
+                                        <div className="flex gap-4 p-1 bg-gray-50 rounded-xl w-fit">
+                                            <button
+                                                type="button"
+                                                onClick={() => setType('retail')}
+                                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${type === 'retail' ? 'bg-white shadow-sm text-[#6F2DBD]' : 'text-gray-500 hover:text-gray-700'}`}
+                                            >
+                                                Retail (For Sale)
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setType('salon_use')}
+                                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${type === 'salon_use' ? 'bg-white shadow-sm text-[#6F2DBD]' : 'text-gray-500 hover:text-gray-700'}`}
+                                            >
+                                                Salon Use
+                                            </button>
                                         </div>
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-sm font-bold text-gray-700">Name</label>
-                                        <input required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#6F2DBD] outline-none" />
+                                        <input required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#6F2DBD] outline-none transition-all" />
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-sm font-bold text-gray-700">Brand</label>
-                                        <input required value={brand} onChange={e => setBrand(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#6F2DBD] outline-none" />
+                                        <input required value={brand} onChange={e => setBrand(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#6F2DBD] outline-none transition-all" />
                                     </div>
                                 </div>
 
@@ -191,22 +249,22 @@ export default function ProductsPage() {
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <label className="text-sm font-bold text-gray-700">Price ($)</label>
-                                            <input required type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#6F2DBD] outline-none" />
+                                            <input required type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#6F2DBD] outline-none transition-all" />
                                         </div>
                                         <div className="space-y-2">
                                             <label className="text-sm font-bold text-gray-700">Buy Link (Optional)</label>
-                                            <input value={link} onChange={e => setLink(e.target.value)} placeholder="https://..." className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#6F2DBD] outline-none" />
+                                            <input value={link} onChange={e => setLink(e.target.value)} placeholder="https://..." className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#6F2DBD] outline-none transition-all" />
                                         </div>
                                     </div>
                                 )}
 
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700">Description</label>
-                                    <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#6F2DBD] outline-none min-h-[80px]" />
+                                    <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#6F2DBD] outline-none min-h-[80px] transition-all" />
                                 </div>
 
-                                <button type="submit" disabled={isSubmitting} className="w-full py-3 bg-[#6F2DBD] text-white rounded-xl font-bold hover:bg-[#5a2499] transition-colors">
-                                    {isSubmitting ? "Adding..." : "Add Product"}
+                                <button type="submit" disabled={isSubmitting} className="w-full py-3 bg-brand text-white rounded-xl font-bold hover:bg-brand-hover transition-all shadow-lg hover:shadow-brand/20 disabled:opacity-70 disabled:shadow-none">
+                                    {isSubmitting ? "Saving..." : (editingId ? "Update Product" : "Add Product")}
                                 </button>
                             </form>
                         </motion.div>

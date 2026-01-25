@@ -16,7 +16,7 @@ export async function getDayAvailability(vendorId: string, dateString: string, s
 
         console.log(`[Availability] Checking for ${dateString}, Service Duration: ${serviceDuration} min`);
 
-        // 1. Fetch Vendor Schedule
+        // 1. Fetch Vendor Schedule (Using Admin SDK)
         const vendorDoc = await adminDb.collection("users").doc(vendorId).get();
         if (!vendorDoc.exists) throw new Error("Vendor not found");
 
@@ -30,30 +30,36 @@ export async function getDayAvailability(vendorId: string, dateString: string, s
 
         // Get Schedule (Default to 9-5 if missing)
         const daySchedule = schedule?.[dayName];
-        const isOpen = daySchedule?.isOpen ?? true; // Default open if not set
-        const openTime = daySchedule?.open || "09:00";
-        const closeTime = daySchedule?.close || "17:00";
 
-        if (!isOpen) return []; // Closed for the day
+        // Handle variations in schedule data structure (isOpen vs boolean)
+        const isOpen = daySchedule?.isOpen === true; // Strict check
+        const openTime = daySchedule?.start || daySchedule?.open || "09:00"; // Support 'start' or 'open' key
+        const closeTime = daySchedule?.end || daySchedule?.close || "17:00"; // Support 'end' or 'close' key
 
-        // 2. Fetch Existing Bookings (Full Day Range)
-        const startTimestamp = Timestamp.fromDate(startOfDay(queryDate));
-        const endTimestamp = Timestamp.fromDate(endOfDay(queryDate));
+        if (!isOpen) {
+            console.log(`[Availability] Vendor is closed on ${dayName}`);
+            return [];
+        }
 
-        const bookingsSnap = await adminDb
-            .collection("users")
-            .doc(vendorId)
-            .collection("appointments")
-            .where("date", ">=", startTimestamp)
-            .where("date", "<=", endTimestamp)
-            .where("status", "in", ["confirmed", "pending"]) // Only active bookings
+        // 2. Fetch Existing Bookings (Using Admin SDK)
+        // Convert query dates to Javascript Dates for the query
+        const startOfDayDate = startOfDay(queryDate);
+        const endOfDayDate = endOfDay(queryDate);
+
+        // Query the nested 'appointments' collection
+        const bookingsRef = adminDb.collection("users").doc(vendorId).collection("appointments");
+
+        const bookingsSnapshot = await bookingsRef
+            .where("date", ">=", startOfDayDate)
+            .where("date", "<=", endOfDayDate)
+            .where("status", "in", ["confirmed", "pending"])
             .get();
 
-        const activeBookings = bookingsSnap.docs.map(doc => {
+        const activeBookings = bookingsSnapshot.docs.map(doc => {
             const data = doc.data();
             return {
                 time: data.time, // "14:00" string stored in DB
-                duration: data.duration || 60 // Read from DB or default to 60
+                duration: parseInt(data.duration) || 60 // Ensure it's a number
             };
         });
 
@@ -77,8 +83,9 @@ export async function getDayAvailability(vendorId: string, dateString: string, s
             const slotEnd = addMinutes(currentTime, serviceDuration);
 
             // Constraint 1: Must finish before closing
+            // We use isAfter so a slot ENDING at 5:00 PM is valid, but 5:01 PM is not.
             if (isAfter(slotEnd, closingTime)) {
-                break; // Stop generating slots that go past closing
+                break;
             }
 
             // Constraint 2: Must not overlap with existing bookings
@@ -88,7 +95,6 @@ export async function getDayAvailability(vendorId: string, dateString: string, s
                 const bookingEnd = addMinutes(bookingStart, booking.duration);
 
                 // Overlap formula: (StartA < EndB) and (EndA > StartB)
-                // A = Proposed Slot, B = Existing Booking
                 return isBefore(slotStart, bookingEnd) && isAfter(slotEnd, bookingStart);
             });
 

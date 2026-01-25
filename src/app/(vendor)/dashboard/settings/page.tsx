@@ -36,6 +36,7 @@ export default function SettingsPage() {
     const [showLogo, setShowLogo] = useState(true);
     const [address, setAddress] = useState("123 Fashion Ave, NY");
     const [theme, setTheme] = useState("royal");
+    const [themeColor, setThemeColor] = useState("#7C3AED"); // Default Purple
     const [externalLinks, setExternalLinks] = useState<any[]>([]);
 
     // Booking State
@@ -69,6 +70,7 @@ export default function SettingsPage() {
                 if (data.tagline) setTagline(data.tagline);
                 if (data.address) setAddress(data.address);
                 if (data.theme) setTheme(data.theme);
+                if (data.themeColor) setThemeColor(data.themeColor);
                 if (data.isBookingEnabled !== undefined) setIsBookingEnabled(data.isBookingEnabled);
                 if (data.schedule) setSchedule(data.schedule);
                 if (data.externalLinks) setExternalLinks(data.externalLinks);
@@ -130,6 +132,7 @@ export default function SettingsPage() {
                 tagline,
                 address,
                 theme,
+                themeColor, // Save the custom color
                 isBookingEnabled,
                 schedule,
                 updatedAt: new Date()
@@ -162,7 +165,7 @@ export default function SettingsPage() {
     ];
 
     return (
-        <div className="min-h-screen bg-[#FDFBF9] p-4 md:p-8 flex flex-col md:flex-row gap-8 relative overflow-hidden">
+        <div className="min-h-screen bg-[#FDFBF9] p-4 md:p-8 flex flex-col md:flex-row gap-8 relative overflow-x-hidden">
 
             {/* Background Gradient Blobs */}
             <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-purple-200/30 rounded-full blur-[100px] pointer-events-none" />
@@ -200,8 +203,8 @@ export default function SettingsPage() {
                 transition={{ duration: 0.5 }}
                 className="flex-1 bg-white/60 backdrop-blur-xl rounded-[40px] shadow-2xl border border-white/40 p-6 md:p-10 h-fit relative flex flex-col z-10"
             >
-                <Link href="/dashboard" className="inline-flex items-center gap-2 text-gray-400 hover:text-luxe-primary font-bold text-sm mb-6 w-fit transition-colors group">
-                    <div className="p-1.5 rounded-lg bg-white border border-gray-100 group-hover:border-[#6F2DBD]/30 group-hover:bg-[#6F2DBD]/5 transition-all">
+                <Link href="/dashboard" className="inline-flex items-center gap-2 text-gray-400 hover:text-brand font-bold text-sm mb-6 w-fit transition-colors group">
+                    <div className="p-1.5 rounded-lg bg-white border border-gray-100 group-hover:border-brand/30 group-hover:bg-brand/5 transition-all">
                         <ArrowLeft className="w-4 h-4" />
                     </div>
                     Back to Dashboard
@@ -216,7 +219,7 @@ export default function SettingsPage() {
                     <button
                         onClick={handleSave}
                         disabled={isSaving}
-                        className="hidden md:flex bg-gray-900 text-white px-8 py-3.5 rounded-2xl font-bold shadow-xl hover:shadow-2xl hover:bg-black hover:scale-[1.02] transition-all items-center gap-2 disabled:opacity-70 active:scale-95"
+                        className="hidden md:flex bg-brand text-white px-8 py-3.5 rounded-2xl font-bold shadow-xl shadow-brand/20 hover:shadow-2xl hover:bg-brand-hover hover:scale-[1.02] transition-all items-center gap-2 disabled:opacity-70 active:scale-95"
                     >
                         {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                         Save Changes
@@ -261,11 +264,11 @@ export default function SettingsPage() {
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 ml-1">Salon Name</label>
                                     <div className="relative group">
-                                        <Store className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-[#6F2DBD] transition-colors" />
+                                        <Store className="absolute left-4 top-4 w-5 h-5 text-gray-400 group-focus-within:text-brand transition-colors" />
                                         <input
                                             value={salonName}
                                             onChange={(e) => setSalonName(e.target.value)}
-                                            className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white border border-gray-100 text-gray-900 font-medium focus:outline-none focus:ring-4 focus:ring-[#6F2DBD]/10 focus:border-[#6F2DBD] transition-all shadow-sm"
+                                            className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white border border-gray-100 text-gray-900 font-medium focus:outline-none focus:ring-4 focus:ring-brand/10 focus:border-brand transition-all shadow-sm"
                                         />
                                     </div>
                                 </div>
@@ -391,6 +394,41 @@ export default function SettingsPage() {
                                                 helperText="1200x600px High Quality"
                                             />
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* Custom Brand Color Picker */}
+                                <div className="p-6 bg-white/50 rounded-3xl border border-gray-100 space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <h3 className="font-bold text-gray-900 text-lg">Brand Color</h3>
+                                            <p className="text-sm text-gray-500">Pick a primary color for your dashboard and public profile.</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div
+                                                className="w-10 h-10 rounded-full shadow-sm border border-gray-200"
+                                                style={{ backgroundColor: themeColor }}
+                                            />
+                                            <input
+                                                type="color"
+                                                value={themeColor}
+                                                onChange={(e) => setThemeColor(e.target.value)}
+                                                className="w-12 h-12 p-1 bg-white rounded-xl cursor-pointer border border-gray-200"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {['#7C3AED', '#DB2777', '#2563EB', '#059669', '#D97706', '#DC2626'].map((c) => (
+                                            <button
+                                                key={c}
+                                                onClick={() => setThemeColor(c)}
+                                                className={cn(
+                                                    "w-8 h-8 rounded-full border-2 transition-transform hover:scale-110",
+                                                    themeColor === c ? "border-gray-900 scale-110" : "border-transparent"
+                                                )}
+                                                style={{ backgroundColor: c }}
+                                            />
+                                        ))}
                                     </div>
                                 </div>
 
@@ -525,7 +563,7 @@ export default function SettingsPage() {
                                                                 ...schedule,
                                                                 [day]: { ...schedule[day], start: e.target.value }
                                                             })}
-                                                            className="flex-1 px-4 py-2.5 rounded-xl bg-gray-50 border-0 text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-[#6F2DBD]/20"
+                                                            className="flex-1 px-4 py-2.5 rounded-xl bg-gray-50 border-0 text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-brand/20"
                                                         />
                                                         <span className="text-gray-300 font-bold">-</span>
                                                         <input
