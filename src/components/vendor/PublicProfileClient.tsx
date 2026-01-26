@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ThemeWrapper } from "@/components/theme/ThemeWrapper";
-import { Calendar, Clock, MapPin, Star, Share2, X, ShoppingBag, Instagram, Facebook, Globe, Youtube, Twitter, Quote, ArrowRight } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Calendar, Clock, MapPin, Star, Share2, X, ShoppingBag, Instagram, Facebook, Globe, Youtube, Twitter, Quote, ArrowRight, Check, CheckCircle2, Sun, Moon } from "lucide-react";
+import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { BookingModal } from "./BookingModal";
 import { ReviewList } from "@/components/public/ReviewList";
 import Image from "next/image";
+import { cn } from "@/lib/utils";
 
+// --- Types ---
 interface Service {
     id: string;
     name: string;
@@ -23,7 +25,8 @@ interface VendorData {
     businessName: string;
     description: string;
     themePreference: string;
-    profileImage: string; // Keep for backward compat, but prefer banner
+    themeColor: string;
+    profileImage: string;
     banner?: string;
     logo?: string;
     showLogo?: boolean;
@@ -43,567 +46,415 @@ interface VendorData {
     }[];
 }
 
+// --- Helpers ---
+const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? `${parseInt(result[1], 16)} ${parseInt(result[2], 16)} ${parseInt(result[3], 16)}` : "124 58 237";
+};
+
+// --- Main Component ---
 export default function PublicProfileClient({ vendor }: { vendor: VendorData }) {
-    const [cart, setCart] = useState<Service[]>([]); // 👈 Multi-service cart
+    const [cart, setCart] = useState<Service[]>([]);
     const [isBookingOpen, setIsBookingOpen] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [activeSection, setActiveSection] = useState("about");
+    const [isDarkMode, setIsDarkMode] = useState(true); // Default Dark Mode
 
-    // Toggle service in cart
-    const toggleService = (service: Service) => {
-        if (!vendor.isBookingEnabled) return;
+    // Scroll & Parallax
+    const { scrollY } = useScroll();
+    const bannerY = useTransform(scrollY, [0, 500], [0, 200]); // Parallax Effect
+    const opacityHero = useTransform(scrollY, [0, 400], [1, 0]);
 
-        setCart(prev => {
-            const exists = prev.find(s => s.id === service.id);
-            if (exists) {
-                return prev.filter(s => s.id !== service.id);
-            }
-            return [...prev, service];
-        });
+    // Refs for Scroll Spy
+    const aboutRef = useRef<HTMLElement>(null);
+    const servicesRef = useRef<HTMLElement>(null);
+    const reviewsRef = useRef<HTMLElement>(null);
+    const galleryRef = useRef<HTMLElement>(null);
+
+    // Scroll Spy Logic
+    useEffect(() => {
+        const handleScroll = () => {
+            const scrollPos = window.scrollY + 200; // Offset
+            if (galleryRef.current && scrollPos >= galleryRef.current.offsetTop) setActiveSection("gallery");
+            else if (reviewsRef.current && scrollPos >= reviewsRef.current.offsetTop) setActiveSection("reviews");
+            else if (servicesRef.current && scrollPos >= servicesRef.current.offsetTop) setActiveSection("services");
+            else setActiveSection("about");
+        };
+        window.addEventListener("scroll", handleScroll);
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, []);
+
+    const scrollTo = (id: string) => {
+        const el = document.getElementById(id);
+        if (el) {
+            const y = el.getBoundingClientRect().top + window.pageYOffset - 100;
+            window.scrollTo({ top: y, behavior: 'smooth' });
+        }
     };
 
-    // Open booking modal with cart
-    const handleBookBundle = () => {
-        if (cart.length === 0) return;
-        setIsBookingOpen(true);
-    };
+    // Toggle service
+    const toggleService = (service: Service, e?: React.MouseEvent) => {
+        if (e) {
+            e.stopPropagation();
+            // e.preventDefault();
+        }
 
-    // Shortcut for direct booking (optional, can just add to cart and open)
-    const handleBookClick = (service?: Service) => {
-        if (!service) {
-            // Handle generic "Book Appointment" button from sidebar
-            if (cart.length > 0) {
-                setIsBookingOpen(true);
-            } else {
-                // Maybe scroll to services?
-                const serviceSection = document.getElementById("services-section");
-                serviceSection?.scrollIntoView({ behavior: "smooth" });
-            }
+        console.log("🖱️ Toggling Service:", service.name);
+
+        // Respect Vendor Settings: If disabled, do not allow adding
+        if (!vendor.isBookingEnabled) {
+            console.warn("🚫 Booking is disabled by the vendor.");
+            // Optional: Add toast here if you have a toast library available in this scope
             return;
         }
 
-        // Check if already in cart
-        if (!cart.find(s => s.id === service.id)) {
-            setCart(prev => [...prev, service]);
-        }
-        setIsBookingOpen(true);
+        setCart(prev => {
+            const exists = prev.find(s => s.id === service.id);
+            const newCart = exists
+                ? prev.filter(s => s.id !== service.id)
+                : [...prev, service];
+
+            console.log("🛒 Cart Updated. New Items:", newCart);
+            return newCart;
+        });
     };
 
-    // Stagger animation variants
-    const container = {
-        hidden: { opacity: 0 },
-        show: {
-            opacity: 1,
-            transition: {
-                staggerChildren: 0.1
-            }
-        }
-    };
+    // Dynamic Style Variables
+    const brandColor = vendor.themeColor || "#7C3AED";
+    const styleVars = {
+        "--brand": brandColor,
+        "--brand-rgb": hexToRgb(brandColor),
+    } as React.CSSProperties;
 
-    const item = {
-        hidden: { y: 20, opacity: 0 },
-        show: { y: 0, opacity: 1 }
-    };
+    // Filter Services by Category
+    const categories = Array.from(new Set(vendor.services.map(s => s.category || "General")));
 
     return (
         <ThemeWrapper theme={vendor.themePreference as any}>
-            <div className="min-h-screen bg-[#121212] text-white selection:bg-luxe-primary/50">
-                {/* Hero Header */}
-                <header className="relative h-[60vh] min-h-[500px] overflow-hidden">
-                    <motion.div
-                        initial={{ scale: 1.1 }}
-                        animate={{ scale: 1 }}
-                        transition={{ duration: 1.5, ease: "easeOut" }}
-                        className="absolute inset-0"
-                    >
+            <div
+                className={cn(
+                    "min-h-screen transition-colors duration-500 pb-20 md:pb-0 font-sans",
+                    isDarkMode ? "bg-[#121212] text-white selection:bg-[rgb(var(--brand-rgb))]/30" : "bg-[#F9F9F7] text-gray-900 selection:bg-[rgb(var(--brand-rgb))]/20"
+                )}
+                style={styleVars}
+            >
+                {/* Theme Toggle */}
+                <button
+                    onClick={() => setIsDarkMode(!isDarkMode)}
+                    className={cn(
+                        "fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-2xl transition-all hover:scale-110",
+                        isDarkMode ? "bg-white text-black hover:bg-gray-200" : "bg-black text-white hover:bg-gray-800"
+                    )}
+                    title="Toggle Theme"
+                >
+                    {isDarkMode ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
+                </button>
+
+                {/* 1. HERO SECTION (Parallax) */}
+                <header className="relative h-[65vh] min-h-[500px] overflow-hidden">
+                    <motion.div style={{ y: bannerY, opacity: opacityHero }} className="absolute inset-0 z-0">
                         <Image
                             src={vendor.banner || vendor.profileImage || "https://images.unsplash.com/photo-1600948836101-f9ffda59d250?auto=format&fit=crop&q=80"}
                             alt={vendor.businessName}
                             fill
                             className="object-cover"
                             priority
-                            sizes="100vw"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/50 to-transparent" />
+                        <div className={cn("absolute inset-0 bg-gradient-to-t transition-colors duration-500", isDarkMode ? "from-[#121212] via-[#121212]/40" : "from-[#F9F9F7] via-[#F9F9F7]/40", "to-transparent")} />
+                        <div className="absolute inset-0 bg-black/20" /> {/* Dimmer */}
                     </motion.div>
 
-                    <div className="absolute inset-0 flex items-end">
-                        <div className="container mx-auto px-6 pb-16">
-                            <motion.div
-                                initial={{ y: 30, opacity: 0 }}
-                                animate={{ y: 0, opacity: 1 }}
-                                transition={{ delay: 0.2, duration: 0.6 }}
-                            >
-                                {/* Logo / Avatar Section */}
-                                <div className="mb-6">
-                                    {(vendor.showLogo !== false && vendor.logo) ? (
-                                        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-[#121212] shadow-2xl overflow-hidden bg-black relative">
-                                            <Image
-                                                src={vendor.logo}
-                                                alt="Logo"
-                                                fill
-                                                className="object-cover"
-                                                sizes="(max-width: 768px) 96px, 128px"
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-[#121212] shadow-2xl bg-white/5 backdrop-blur-md flex items-center justify-center text-white">
-                                            <span className="text-4xl font-bold">{vendor.businessName.charAt(0).toUpperCase()}</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <span className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full text-white text-xs font-bold mb-6 border border-white/10 uppercase tracking-widest shadow-lg">
-                                    <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" /> Premium Partner
-                                </span>
-                                <h1 className="text-5xl md:text-8xl font-black text-white mb-6 tracking-tight drop-shadow-sm leading-none">
-                                    {vendor.businessName}
-                                </h1>
-                                <div className="flex flex-wrap items-center text-gray-200 text-sm md:text-base gap-6 font-medium tracking-wide">
-                                    <span className="flex items-center bg-black/40 backdrop-blur-sm px-3 py-1 rounded-lg border border-white/5">
-                                        <MapPin className="w-4 h-4 mr-2" /> {vendor.address}
-                                    </span>
-                                    {vendor.isBookingEnabled && vendor.platformStatus !== 'shadow_banned' ? (
-                                        <span className="flex items-center text-green-400 bg-green-950/40 backdrop-blur-sm px-3 py-1 rounded-lg border border-green-500/20">
-                                            <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse" />
-                                            Bookings Available
-                                        </span>
-                                    ) : vendor.platformStatus === 'shadow_banned' ? (
-                                        <span className="flex items-center text-yellow-400 bg-yellow-950/40 backdrop-blur-sm px-3 py-1 rounded-lg border border-yellow-500/20" title="Online booking is temporarily disabled for this vendor.">
-                                            <div className="w-2 h-2 bg-yellow-500 rounded-full mr-2" />
-                                            Booking Disabled
-                                        </span>
-                                    ) : (
-                                        <span className="flex items-center text-gray-400 bg-gray-900/60 backdrop-blur-sm px-3 py-1 rounded-lg border border-white/10">
-                                            <Clock className="w-4 h-4 mr-2" /> Application Closed
-                                        </span>
-                                    )}
-                                </div>
-
-                                {vendor.externalLinks && vendor.externalLinks.length > 0 && (
-                                    <div className="flex gap-3 mt-6">
-                                        {vendor.externalLinks.map((link) => {
-                                            const iconMap = {
-                                                instagram: Instagram,
-                                                facebook: Facebook,
-                                                twitter: Twitter,
-                                                youtube: Youtube,
-                                                website: Globe,
-                                                shop: ShoppingBag
-                                            };
-                                            const Icon: any = iconMap[link.platform] || Globe;
-                                            return (
-                                                <a
-                                                    key={link.id}
-                                                    href={link.url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="p-2 bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-full text-white transition-all border border-white/10 hover:scale-110 hover:border-white/30"
-                                                    title={link.label}
-                                                >
-                                                    <Icon size={18} />
-                                                </a>
-                                            );
-                                        })}
+                    <div className="absolute inset-0 flex items-end z-10 pb-12">
+                        <div className="container mx-auto px-4 md:px-8">
+                            <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.8 }} className="max-w-4xl">
+                                {/* Logo */}
+                                {(vendor.showLogo !== false && vendor.logo) ? (
+                                    <div className="w-24 h-24 md:w-32 md:h-32 rounded-3xl border-2 border-white/10 shadow-2xl overflow-hidden bg-black/50 backdrop-blur-xl relative mb-6">
+                                        <Image src={vendor.logo} alt="Logo" fill className="object-cover" />
+                                    </div>
+                                ) : (
+                                    <div className="w-24 h-24 md:w-32 md:h-32 rounded-3xl border-2 border-white/10 shadow-2xl bg-white/5 backdrop-blur-xl flex items-center justify-center text-white mb-6">
+                                        <span className="text-4xl font-bold">{vendor.businessName.charAt(0)}</span>
                                     </div>
                                 )}
+
+                                {/* Badges */}
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[rgb(var(--brand-rgb))]/20 backdrop-blur-md rounded-full text-[rgb(var(--brand-rgb))] text-xs font-bold border border-[rgb(var(--brand-rgb))]/20 uppercase tracking-widest shadow-lg">
+                                        <Star className="w-3 h-3 fill-current" /> Premium Partner
+                                    </span>
+                                    {vendor.isBookingEnabled ? (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-500/20 backdrop-blur-md rounded-full text-green-400 text-xs font-bold border border-green-500/20 uppercase tracking-widest">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> Open
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-gray-400 text-xs font-bold border border-white/10 uppercase tracking-widest">
+                                            Closed
+                                        </span>
+                                    )}
+                                </div>
+
+                                <h1 className={cn("text-4xl md:text-7xl font-black mb-4 tracking-tight leading-none drop-shadow-lg", isDarkMode ? "text-white" : "text-gray-900")}>
+                                    {vendor.businessName}
+                                </h1>
+                                <p className={cn("text-lg md:text-xl font-light max-w-2xl flex items-center gap-2", isDarkMode ? "text-white/80" : "text-gray-700")}>
+                                    <MapPin className="w-4 h-4 text-[rgb(var(--brand-rgb))]" /> {vendor.address}
+                                </p>
                             </motion.div>
                         </div>
                     </div>
                 </header>
 
-                <div className="container mx-auto px-4 sm:px-6 py-12 -mt-10 relative z-10">
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-
-                        {/* LEFT COLUMN: Main Content */}
-                        <div className="lg:col-span-8 space-y-12">
-                            {/* About Section */}
-                            <motion.section
-                                initial={{ y: 20, opacity: 0 }}
-                                whileInView={{ y: 0, opacity: 1 }}
-                                viewport={{ once: true }}
-                                className="bg-[#1a1a1a]/60 backdrop-blur-xl p-8 rounded-3xl border border-white/5 shadow-2xl"
-                            >
-                                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-white">
-                                    <span className="w-8 h-1 bg-luxe-primary rounded-full inline-block shadow-[0_0_10px_currentColor]"></span> About Us
-                                </h2>
-                                <p className="text-lg leading-relaxed text-gray-300 font-light text-justify">
-                                    {vendor.description}
-                                </p>
-                            </motion.section>
-
-                            {/* Services Section */}
-                            <section>
-                                <div className="flex items-end justify-between mb-8 px-2">
-                                    <div>
-                                        <h2 className="text-3xl font-bold text-white">Service Menu</h2>
-                                        <p className="text-gray-400 text-sm mt-1">Curated treatments for you</p>
-                                    </div>
-                                    <span className="text-xs font-bold bg-white/5 border border-white/10 px-3 py-1 rounded-full uppercase tracking-wider text-gray-300">
-                                        {vendor.services.length} Services
-                                    </span>
-                                </div>
-
-                                <motion.div
-                                    variants={container}
-                                    initial="hidden"
-                                    whileInView="show"
-                                    viewport={{ once: true }}
-                                    className="grid gap-4"
-                                >
-                                    {vendor.services.length === 0 ? (
-                                        <div className="text-center py-12 bg-white/5 rounded-3xl border border-dashed border-white/10">
-                                            <p className="text-gray-500 italic">No services listed yet.</p>
-                                        </div>
-                                    ) : (
-                                        vendor.services.map((service, idx) => {
-                                            const isSelected = cart.some(s => s.id === service.id);
-                                            return (
-                                                <motion.div
-                                                    key={idx}
-                                                    variants={item}
-                                                    className={`
-                                                        group relative flex flex-col md:flex-row md:items-center justify-between p-6 rounded-3xl 
-                                                        transition-all duration-300 border shadow-lg
-                                                        ${isSelected
-                                                            ? "bg-luxe-primary/10 border-luxe-primary/50 shadow-luxe-primary/10"
-                                                            : "bg-black/40 backdrop-blur-md border-white/5 hover:border-luxe-primary/30 hover:bg-black/60"
-                                                        }
-                                                    `}
-                                                >
-                                                    <div className="mb-4 md:mb-0 relative z-10 w-full md:w-2/3">
-                                                        <h3 className={`font-bold text-xl transition-colors ${isSelected ? "text-luxe-primary" : "text-white group-hover:text-luxe-primary"}`}>{service.name}</h3>
-                                                        <p className="text-sm text-gray-400 mt-1 flex items-center gap-2">
-                                                            <Clock className="w-3.5 h-3.5 text-luxe-primary" />
-                                                            <span className="font-medium text-gray-300">{service.duration} mins</span>
-                                                            <span className="w-1 h-1 bg-gray-500 rounded-full" />
-                                                            <span className="uppercase tracking-wider text-[10px] text-gray-500">{service.category}</span>
-                                                        </p>
-                                                        {service.description && (
-                                                            <p className="text-sm text-gray-500 mt-2 line-clamp-2 md:line-clamp-1 group-hover:text-gray-400 transition-colors">{service.description}</p>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="flex items-center gap-5 justify-between md:justify-end relative z-10">
-                                                        <div className="text-right">
-                                                            <span className="font-bold text-2xl tracking-tight text-white group-hover:text-luxe-primary transition-colors drop-shadow-lg">₹{service.price}</span>
-                                                        </div>
-
-                                                        {vendor.isBookingEnabled && vendor.platformStatus !== 'shadow_banned' ? (
-                                                            <button
-                                                                onClick={() => toggleService(service)}
-                                                                className={`
-                                                                    px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg flex items-center gap-2
-                                                                    ${isSelected
-                                                                        ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 ring-1 ring-red-500/50"
-                                                                        : "bg-white text-black hover:bg-luxe-primary hover:text-white hover:shadow-luxe-primary/30"
-                                                                    }
-                                                                `}
-                                                            >
-                                                                {isSelected ? (
-                                                                    <>Remove <X className="w-4 h-4" /></>
-                                                                ) : (
-                                                                    "Select"
-                                                                )}
-                                                            </button>
-                                                        ) : vendor.platformStatus === 'shadow_banned' ? (
-                                                            <div className="group/tooltip relative">
-                                                                <button disabled className="px-6 py-3 rounded-xl bg-yellow-500/10 text-yellow-500 text-sm font-bold cursor-not-allowed border border-yellow-500/20">
-                                                                    Disabled
-                                                                </button>
-                                                                <div className="absolute bottom-full mb-2 right-0 w-48 p-2 bg-gray-900 text-white text-xs rounded-lg shadow-xl opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none text-center border border-white/10">
-                                                                    Online booking is temporarily disabled for this vendor.
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <button disabled className="px-6 py-3 rounded-xl bg-white/5 text-gray-600 text-sm font-bold cursor-not-allowed border border-white/5">
-                                                                N/A
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </motion.div>
-                                            );
-                                        })
+                {/* 2. STICKY NAVIGATION */}
+                <div className={cn("sticky top-0 z-40 backdrop-blur-xl border-b transition-colors duration-300", isDarkMode ? "bg-[#121212]/80 border-white/5" : "bg-white/80 border-gray-200")}>
+                    <div className="container mx-auto px-4 md:px-8">
+                        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-3">
+                            {['about', 'services', 'reviews', 'gallery'].map((section) => (
+                                <button
+                                    key={section}
+                                    onClick={() => scrollTo(section)}
+                                    className={cn(
+                                        "px-5 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap",
+                                        activeSection === section
+                                            ? "bg-[rgb(var(--brand-rgb))] text-white shadow-lg shadow-[rgb(var(--brand-rgb))]/25"
+                                            : (isDarkMode ? "text-gray-400 hover:bg-white/5 hover:text-white" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900")
                                     )}
-                                </motion.div>
+                                >
+                                    {section.charAt(0).toUpperCase() + section.slice(1)}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. MAIN CONTENT GRID */}
+                <div className="container mx-auto px-4 md:px-8 py-10">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+
+                        {/* LEFT COLUMN (Content) */}
+                        <div className="lg:col-span-8 space-y-16">
+
+                            {/* ABOUT */}
+                            <section id="about" ref={aboutRef} className="scroll-mt-32">
+                                <h2 className={cn("text-2xl font-bold mb-6 flex items-center gap-2", isDarkMode ? "text-white" : "text-gray-900")}>About Us</h2>
+                                <p className={cn("text-lg leading-relaxed font-light", isDarkMode ? "text-gray-300" : "text-gray-600")}>{vendor.description}</p>
                             </section>
 
-                            {/* 🛒 STICKY FOOTER CART */}
-                            <AnimatePresence>
-                                {cart.length > 0 && (
-                                    <motion.div
-                                        initial={{ y: 100, opacity: 0 }}
-                                        animate={{ y: 0, opacity: 1 }}
-                                        exit={{ y: 100, opacity: 0 }}
-                                        className="fixed bottom-6 left-0 right-0 z-50 px-4 pointer-events-none"
-                                    >
-                                        <div className="container mx-auto max-w-2xl">
-                                            <div className="bg-[#1a1a1a] border border-white/10 shadow-2xl rounded-2xl p-4 flex items-center justify-between pointer-events-auto ring-1 ring-white/10">
-                                                <div className="flex flex-col pl-2">
-                                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
-                                                        {cart.length} Service{cart.length > 1 ? 's' : ''} Selected
-                                                    </span>
-                                                    <div className="flex items-baseline gap-2">
-                                                        <span className="text-xl font-black text-white">₹{cart.reduce((a, b) => a + b.price, 0)}</span>
-                                                        <span className="text-sm text-gray-500 font-medium">
-                                                            • {cart.reduce((a, b: any) => a + (parseInt(b.duration) || 30), 0)} mins
-                                                        </span>
-                                                    </div>
-                                                </div>
+                            {/* SERVICES (Grid Layout) */}
+                            <section id="services" ref={servicesRef} className="scroll-mt-32">
+                                <h2 className={cn("text-3xl font-bold mb-8", isDarkMode ? "text-white" : "text-gray-900")}>Services</h2>
 
-                                                <button
-                                                    onClick={handleBookBundle}
-                                                    className="px-8 py-3 bg-luxe-primary text-white font-bold rounded-xl hover:bg-luxe-primary/90 transition-colors shadow-lg shadow-luxe-primary/25 flex items-center gap-2"
-                                                >
-                                                    Book Now <ArrowRight className="w-4 h-4" />
-                                                </button>
+                                <div className="space-y-10">
+                                    {categories.map((category) => (
+                                        <div key={category}>
+                                            <h3 className="text-xl font-bold text-[rgb(var(--brand-rgb))] mb-4 flex items-center gap-2">
+                                                <span className="w-8 h-[2px] bg-[rgb(var(--brand-rgb))] opacity-50" /> {category}
+                                            </h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {vendor.services.filter(s => s.category === category).map((service) => {
+                                                    const isSelected = cart.some(s => s.id === service.id);
+                                                    return (
+                                                        <motion.div
+                                                            key={service.id}
+                                                            whileHover={{ y: -5 }}
+                                                            className={cn(
+                                                                "group relative p-5 rounded-3xl border transition-all duration-300 cursor-pointer overflow-hidden select-none",
+                                                                isSelected
+                                                                    ? "bg-[rgb(var(--brand-rgb))]/10 border-[rgb(var(--brand-rgb))]/50 shadow-lg shadow-[rgb(var(--brand-rgb))]/10"
+                                                                    : (isDarkMode ? "bg-white/5 border-white/5 hover:border-white/10 hover:bg-white/10" : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-xl")
+                                                            )}
+                                                            onClick={(e) => toggleService(service, e)}
+                                                        >
+                                                            {/* Selected Indicator */}
+                                                            {isSelected && (
+                                                                <div className="absolute top-4 right-4 text-[rgb(var(--brand-rgb))]">
+                                                                    <CheckCircle2 className="w-6 h-6 fill-[rgb(var(--brand-rgb))]/20" />
+                                                                </div>
+                                                            )}
+
+                                                            <h4 className={cn("font-bold text-lg mb-1 pr-8", isSelected ? "text-[rgb(var(--brand-rgb))]" : (isDarkMode ? "text-white" : "text-gray-900"))}>{service.name}</h4>
+                                                            <div className="flex items-center gap-3 text-xs font-medium text-gray-400 mb-3">
+                                                                <span className={cn("px-2 py-1 rounded-md", isDarkMode ? "bg-white/5" : "bg-gray-100")}>{service.duration} mins</span>
+                                                                {service.description && <span className="truncate max-w-[120px]">{service.description}</span>}
+                                                            </div>
+
+                                                            <div className="flex items-end justify-between mt-auto">
+                                                                <div className={cn("text-xl font-bold", isDarkMode ? "text-white" : "text-gray-900")}>₹{service.price}</div>
+                                                                <button
+                                                                    type="button"
+                                                                    className={cn(
+                                                                        "px-4 py-2 rounded-xl text-xs font-bold transition-colors z-20 relative",
+                                                                        !vendor.isBookingEnabled ? "opacity-50 cursor-not-allowed bg-gray-100 text-gray-400" :
+                                                                            isSelected
+                                                                                ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                                                                                : "bg-gray-100 text-gray-900 group-hover:bg-[rgb(var(--brand-rgb))] group-hover:text-white"
+                                                                    )}
+                                                                    disabled={!vendor.isBookingEnabled}
+                                                                    onClick={(e) => toggleService(service, e)}
+                                                                >
+                                                                    {isSelected ? "Remove" : (!vendor.isBookingEnabled ? "Closed" : "Add")}
+                                                                </button>
+                                                            </div>
+                                                        </motion.div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-
-
-                            {/* Gallery Section */}
-                            <section>
-                                <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2">
-                                    Gallery <span className="text-sm font-normal text-gray-500">({vendor.gallery.length})</span>
-                                </h2>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 auto-rows-[200px]">
-                                    {vendor.gallery.map((img: string, idx: number) => (
-                                        <motion.div
-                                            key={idx}
-                                            initial={{ opacity: 0, scale: 0.9 }}
-                                            whileInView={{ opacity: 1, scale: 1 }}
-                                            transition={{ delay: idx * 0.1 }}
-                                            viewport={{ once: true }}
-                                            className={`rounded-2xl overflow-hidden relative group cursor-zoom-in shadow-md bg-black ${idx === 0 ? 'col-span-2 row-span-2 md:row-span-2' : ''}`}
-                                        >
-                                            <Image
-                                                src={img}
-                                                alt="Gallery"
-                                                fill
-                                                className="object-cover transition-transform duration-700 group-hover:scale-110 opacity-80 group-hover:opacity-100"
-                                                sizes="(max-width: 768px) 50vw, 25vw"
-                                            />
-                                            <div
-                                                className="absolute inset-0 bg-black/0 group-hover:bg-white/5 transition-colors cursor-pointer"
-                                                onClick={() => setSelectedImage(img)}
-                                            />
-                                        </motion.div>
                                     ))}
                                 </div>
                             </section>
 
-                            {/* Staff Section */}
-                            {vendor.staff && vendor.staff.length > 0 && (
-                                <section>
-                                    <h2 className="text-2xl font-bold mb-6 text-white">Meet the Team</h2>
-                                    <div className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide">
-                                        {vendor.staff.map((member: any) => (
-                                            <div key={member.id} className="shrink-0 text-center group">
-                                                <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-white/10 shadow-lg mb-3 mx-auto relative group-hover:border-luxe-primary transition-colors">
-                                                    <Image
-                                                        src={member.photo || "https://source.unsplash.com/random/200x200/?face"}
-                                                        alt={member.name}
-                                                        fill
-                                                        className="object-cover"
-                                                        sizes="96px"
-                                                    />
-                                                </div>
-                                                <h4 className="font-bold text-white group-hover:text-luxe-primary transition-colors">{member.name}</h4>
-                                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">{member.role}</p>
-                                            </div>
+                            {/* REVIEWS */}
+                            <section id="reviews" ref={reviewsRef} className="scroll-mt-32">
+                                <ReviewList vendorId={vendor.uid} isDarkMode={isDarkMode} />
+                            </section>
+
+                            {/* GALLERY */}
+                            {vendor.gallery.length > 0 && (
+                                <section id="gallery" ref={galleryRef} className="scroll-mt-32">
+                                    <h2 className={cn("text-2xl font-bold mb-6", isDarkMode ? "text-white" : "text-gray-900")}>Gallery</h2>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 auto-rows-[150px] md:auto-rows-[200px]">
+                                        {vendor.gallery.slice(0, 8).map((img, idx) => (
+                                            <motion.div
+                                                key={idx}
+                                                whileHover={{ scale: 1.02 }}
+                                                className={cn(
+                                                    "relative rounded-2xl overflow-hidden cursor-zoom-in group",
+                                                    isDarkMode ? "bg-white/5" : "bg-gray-100",
+                                                    idx === 0 ? "col-span-2 row-span-2" : ""
+                                                )}
+                                                onClick={() => setSelectedImage(img)}
+                                            >
+                                                <Image src={img} alt="Gallery" fill className="object-cover opacity-80 group-hover:opacity-100 transition-opacity" sizes="50vw" />
+                                            </motion.div>
                                         ))}
                                     </div>
                                 </section>
                             )}
+                        </div>
 
-                            {/* Products Section */}
-                            {vendor.products && vendor.products.length > 0 && (
-                                <section>
-                                    <h2 className="text-2xl font-bold mb-6 text-white">Our Products</h2>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {vendor.products.map((product: any) => (
-                                            <div key={product.id} className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/5 shadow-sm flex flex-col hover:bg-white/10 transition-colors">
-                                                <div className="aspect-square rounded-xl bg-white/5 mb-3 overflow-hidden relative">
-                                                    <Image
-                                                        src={product.image || "https://source.unsplash.com/random/200x200/?product"}
-                                                        alt={product.name}
-                                                        fill
-                                                        className="object-cover"
-                                                        sizes="(max-width: 768px) 50vw, 25vw"
-                                                    />
-                                                </div>
-                                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">{product.brand}</div>
-                                                <h4 className="font-bold text-gray-200 text-sm leading-tight mb-2 flex-1">{product.name}</h4>
+                        {/* RIGHT COLUMN (Sticky Sidebar) */}
+                        <div className="hidden lg:block lg:col-span-4 relative">
+                            <div className="sticky top-24 space-y-6">
 
-                                                {product.type === 'retail' && (
-                                                    <div className="flex items-center justify-between mt-2">
-                                                        <span className="font-bold text-white">${product.price}</span>
-                                                        {product.purchaseLink ? (
-                                                            <a href={product.purchaseLink} target="_blank" className="p-2 bg-white text-black rounded-lg hover:bg-luxe-primary hover:text-white transition-colors">
-                                                                <ShoppingBag className="w-3 h-3" />
-                                                            </a>
-                                                        ) : (
-                                                            <span className="text-xs text-gray-500">In Store</span>
-                                                        )}
-                                                    </div>
+                                {/* Info Card */}
+                                <div className={cn("p-6 rounded-3xl border backdrop-blur-xl", isDarkMode ? "bg-white/5 border-white/10" : "bg-white border-gray-100 shadow-xl")}>
+                                    <h3 className={cn("font-bold text-lg mb-4 flex items-center gap-2", isDarkMode ? "text-white" : "text-gray-900")}>
+                                        <Clock className="w-5 h-5 text-[rgb(var(--brand-rgb))]" /> Hours
+                                    </h3>
+                                    <div className="space-y-3 text-sm">
+                                        {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
+                                            <div key={day} className="flex justify-between text-gray-400">
+                                                <span className="capitalize w-24">{day}</span>
+                                                {vendor.schedule?.[day]?.isOpen ? (
+                                                    <span className={cn("font-medium", isDarkMode ? "text-white" : "text-gray-900")}>{vendor.schedule[day].start} - {vendor.schedule[day].end}</span>
+                                                ) : (
+                                                    <span className="text-red-400/80">Closed</span>
                                                 )}
                                             </div>
                                         ))}
                                     </div>
-                                </section>
-                            )}
-
-                            {/* Reviews Section */}
-                            <section>
-                                <ReviewList vendorId={vendor.uid} />
-                            </section>
-                        </div>
-
-                        {/* RIGHT COLUMN: Sidebar */}
-                        <div className="lg:col-span-4 space-y-8">
-
-                            {/* Sticky Box */}
-                            <div className="sticky top-8 space-y-6">
-                                {/* Location & Hours Card */}
-                                <motion.div
-                                    initial={{ x: 20, opacity: 0 }}
-                                    animate={{ x: 0, opacity: 1 }}
-                                    transition={{ delay: 0.5 }}
-                                    className="p-8 rounded-3xl bg-black/40 backdrop-blur-xl border border-white/10 shadow-2xl"
-                                >
-                                    <h3 className="font-bold text-xl mb-6 flex items-center gap-2 text-white">
-                                        <Clock className="w-5 h-5 text-luxe-primary" />
-                                        Opening Hours
-                                    </h3>
-
-                                    <div className="space-y-4 text-sm mb-8">
-                                        {vendor.schedule && Object.keys(vendor.schedule).length > 0 ? (
-                                            ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
-                                                <div key={day} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded-lg transition-colors">
-                                                    <span className="capitalize font-medium text-gray-400 w-24">{day}</span>
-                                                    {vendor.schedule[day]?.isOpen ? (
-                                                        <span className="font-mono font-bold text-white tracking-wide">{vendor.schedule[day].start} - {vendor.schedule[day].end}</span>
-                                                    ) : (
-                                                        <span className="text-red-400 font-bold text-xs bg-red-950/30 border border-red-500/20 px-2 py-0.5 rounded-md">Closed</span>
-                                                    )}
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <p className="text-gray-500 italic">No schedule available.</p>
-                                        )}
+                                    <div className="mt-6 flex gap-2">
+                                        <button className={cn("flex-1 py-3 rounded-xl font-bold text-xs transition-colors", isDarkMode ? "bg-white/5 hover:bg-white/10 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900")}>
+                                            Get Directions
+                                        </button>
+                                        <button className={cn("flex-1 py-3 rounded-xl font-bold text-xs transition-colors", isDarkMode ? "bg-white/5 hover:bg-white/10 text-white" : "bg-gray-100 hover:bg-gray-200 text-gray-900")}>
+                                            Share Profile
+                                        </button>
                                     </div>
+                                </div>
 
-                                    {vendor.isBookingEnabled && vendor.platformStatus !== 'shadow_banned' ? (
-                                        <button
-                                            onClick={() => handleBookClick()}
-                                            className="w-full py-4 rounded-xl bg-luxe-primary text-white font-bold shadow-lg shadow-luxe-primary/20 hover:bg-luxe-primary/90 hover:scale-[1.02] transition-all"
+                                {/* DESKTOP CART SUMMARY */}
+                                <AnimatePresence>
+                                    {cart.length > 0 && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: 10 }}
+                                            className="p-6 rounded-3xl bg-[rgb(var(--brand-rgb))]/10 border border-[rgb(var(--brand-rgb))]/20 backdrop-blur-xl relative overflow-hidden"
                                         >
-                                            Book Appointment
-                                        </button>
-                                    ) : vendor.platformStatus === 'shadow_banned' ? (
-                                        <div className="group/sidebar-tooltip relative w-full">
-                                            <button disabled className="w-full py-4 rounded-xl bg-yellow-500/10 text-yellow-500 font-bold text-center text-sm border border-yellow-500/20 cursor-not-allowed">
-                                                Booking Disabled
-                                            </button>
-                                            <div className="absolute bottom-full mb-2 left-0 right-0 p-2 bg-gray-900 text-white text-xs rounded-lg shadow-xl opacity-0 group-hover/sidebar-tooltip:opacity-100 transition-opacity pointer-events-none text-center border border-white/10 z-50">
-                                                Online booking is temporarily disabled for this vendor.
+                                            <div className="absolute top-0 right-0 w-32 h-32 bg-[rgb(var(--brand-rgb))]/20 rounded-full blur-3xl -z-10" />
+
+                                            <h3 className={cn("font-bold text-lg mb-4", isDarkMode ? "text-white" : "text-gray-900")}>Your Booking</h3>
+                                            <div className="space-y-2 mb-6 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                                                {cart.map(item => (
+                                                    <div key={item.id} className="flex justify-between text-sm">
+                                                        <span className={cn("truncate", isDarkMode ? "text-gray-300" : "text-gray-600")}>{item.name}</span>
+                                                        <span className={cn("font-medium", isDarkMode ? "text-white" : "text-gray-900")}>₹{item.price}</span>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        </div>
-                                    ) : (
-                                        <div className="w-full py-4 rounded-xl bg-white/5 text-gray-400 font-bold text-center text-sm border border-white/10 opacity-70">
-                                            Currently Not Accepting Bookings
-                                        </div>
-                                    )}
 
-                                    <div className="mt-4 flex gap-3">
-                                        <button className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 font-bold text-xs text-gray-300 hover:bg-white/10 transition-colors flex items-center justify-center gap-2">
-                                            <Share2 className="w-4 h-4" /> Share
-                                        </button>
-                                        <a href={`https://maps.google.com/?q=${encodeURIComponent(vendor.address)}`} target="_blank" className="flex-1 py-3 rounded-xl border border-white/10 bg-white/5 font-bold text-xs text-gray-300 hover:bg-white/10 transition-colors flex items-center justify-center gap-2">
-                                            <MapPin className="w-4 h-4" /> Map
-                                        </a>
-                                    </div>
-                                </motion.div>
+                                            <div className="pt-4 border-t border-white/10 flex justify-between items-end mb-6">
+                                                <div className="text-sm text-gray-400">Total Estimate</div>
+                                                <div className={cn("text-2xl font-black", isDarkMode ? "text-white" : "text-gray-900")}>₹{cart.reduce((sum, item) => sum + item.price, 0)}</div>
+                                            </div>
 
-                                {/* Promo Card */}
-                                <motion.div
-                                    initial={{ x: 20, opacity: 0 }}
-                                    animate={{ x: 0, opacity: 1 }}
-                                    transition={{ delay: 0.6 }}
-                                    className="p-8 rounded-3xl bg-indigo-600 text-white shadow-xl relative overflow-hidden group"
-                                >
-                                    <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-colors" />
-                                    <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-black/20 to-transparent" />
-
-                                    <div className="relative z-10">
-                                        <span className="inline-block bg-white/20 backdrop-blur-md text-[10px] font-bold px-2 py-1 rounded-md mb-3 border border-white/10">NEW CUSTOMER OFFER</span>
-                                        <h3 className="font-bold text-2xl mb-2">First Time?</h3>
-                                        <p className="text-indigo-100 text-sm mb-6 leading-relaxed">
-                                            Experience luxury for less. Get <span className="font-bold text-white">15% OFF</span> your first booking with us.
-                                        </p>
-
-                                        <div className="flex items-center justify-between bg-black/20 rounded-xl p-1 pl-4 border border-white/10">
-                                            <code className="font-mono font-bold text-lg tracking-wider">LUXE15</code>
-                                            <button className="bg-white text-indigo-600 px-4 py-2 rounded-lg text-xs font-bold hover:scale-105 transition-transform shadow-lg">
-                                                Copy
+                                            <button
+                                                onClick={() => setIsBookingOpen(true)}
+                                                className="w-full py-4 rounded-xl bg-[rgb(var(--brand-rgb))] text-white font-bold shadow-lg shadow-[rgb(var(--brand-rgb))]/25 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                Book Appointment <ArrowRight className="w-4 h-4" />
                                             </button>
-                                        </div>
-                                    </div>
-                                </motion.div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </div>
                         </div>
+
                     </div>
                 </div>
-            </div>
 
-            {/* Booking Modal */}
-            <BookingModal
-                isOpen={isBookingOpen}
-                onClose={() => setIsBookingOpen(false)}
-                vendorId={vendor.uid}
-                services={cart}
-                schedule={vendor.schedule}
-            />
-
-
-            {/* Gallery Lightbox */}
-            <AnimatePresence>
-                {selectedImage && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setSelectedImage(null)}
-                        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4"
-                    >
-                        <motion.button
-                            initial={{ opacity: 0, y: -20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="absolute top-6 right-6 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
-                        >
-                            <X className="w-6 h-6" />
-                        </motion.button>
-
+                {/* 4. MOBILE FLOATING CART */}
+                <AnimatePresence>
+                    {cart.length > 0 && (
                         <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="relative w-full max-w-5xl aspect-video md:aspect-auto md:h-[90vh]"
+                            initial={{ y: 100 }}
+                            animate={{ y: 0 }}
+                            exit={{ y: 100 }}
+                            className="fixed bottom-0 left-0 right-0 z-50 p-4 lg:hidden"
                         >
-                            <Image
-                                src={selectedImage}
-                                alt="Gallery Fullscreen"
-                                fill
-                                className="object-contain"
-                                sizes="100vw"
-                                onClick={(e) => e.stopPropagation()}
-                            />
+                            <div className={cn("rounded-2xl shadow-2xl p-4 border flex items-center justify-between", isDarkMode ? "bg-[#1a1a1a] border-white/10 ring-1 ring-white/5" : "bg-white border-gray-100")}>
+                                <div>
+                                    <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">{cart.length} Services</div>
+                                    <div className={cn("text-xl font-black", isDarkMode ? "text-white" : "text-gray-900")}>₹{cart.reduce((sum, item) => sum + item.price, 0)}</div>
+                                </div>
+                                <button
+                                    onClick={() => setIsBookingOpen(true)}
+                                    className="px-8 py-3 bg-[rgb(var(--brand-rgb))] text-white font-bold rounded-xl shadow-lg shadow-[rgb(var(--brand-rgb))]/20 hover:scale-105 transition-transform"
+                                >
+                                    Review & Book
+                                </button>
+                            </div>
                         </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                    )}
+                </AnimatePresence>
+
+                {/* MODALS */}
+                <BookingModal
+                    isOpen={isBookingOpen}
+                    onClose={() => setIsBookingOpen(false)}
+                    vendorId={vendor.uid}
+                    services={cart}
+                    schedule={vendor.schedule}
+                />
+
+                <AnimatePresence>
+                    {selectedImage && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setSelectedImage(null)}
+                            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4"
+                        >
+                            <button className="absolute top-6 right-6 text-white bg-white/10 p-2 rounded-full"><X /></button>
+                            <img src={selectedImage} alt="Fullscreen" className="max-w-full max-h-[90vh] object-contain rounded-lg" />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+            </div >
         </ThemeWrapper >
     );
 }

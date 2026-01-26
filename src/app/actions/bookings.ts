@@ -24,7 +24,7 @@ interface BookingData {
 
 export async function createBooking(data: BookingData) {
     try {
-        const { date, time, vendorId, customerId, customerPhone } = data;
+        const { date, time, vendorId, customerId, customerPhone, customerName, serviceName } = data;
 
         // 1. Parse Date & Time
         const appointmentDate = new Date(`${date}T${time}`);
@@ -37,15 +37,17 @@ export async function createBooking(data: BookingData) {
 
         // 3. Force Status & Add Metadata
         const startTimestamp = Timestamp.fromDate(appointmentDate);
+        const bookingId = adminDb.collection('bookings').doc().id; // Generate ID
+        const createdAt = Timestamp.now();
 
         // --- 🔒 COLLISION CHECK (Start) ---
-        // Query for ANY existing booking at this exact time
+        // Query for ANY existing booking at this exact time (Vendor's Subcollection is truth)
         const collisionQuery = await adminDb
             .collection('users')
             .doc(vendorId)
             .collection('appointments')
-            .where('date', '==', startTimestamp) // Exact timestamp match
-            .where('status', 'in', ['confirmed', 'pending']) // Only block if active
+            .where('date', '==', startTimestamp)
+            .where('status', 'in', ['confirmed', 'pending'])
             .get();
 
         if (!collisionQuery.empty) {
@@ -53,84 +55,89 @@ export async function createBooking(data: BookingData) {
         }
         // --- 🔒 COLLISION CHECK (End) ---
 
-        // Construct Payload
+        // Construct Payload (Shared across all writes)
         const bookingPayload = {
             ...data,
-            date: startTimestamp, // Use the same timestamp we checked
-            status: 'pending', // Force status
-            createdAt: Timestamp.now(),
+            id: bookingId, // Explicit ID
+            date: startTimestamp,
+            status: 'pending',
+            createdAt: createdAt,
         };
 
-        // If multiple services, strictly ensure duration/price match (optional server-side validation here)
-        // For now, we trust the client passed the correct total duration/price or we could recalc:
-        if (data.services && data.services.length > 0) {
-            // We could override totals here for security:
-            // const totalDuration = data.services.reduce((acc, s) => acc + (s.duration || 0), 0);
-            // const totalPrice = data.services.reduce((acc, s) => acc + (s.price || 0), 0);
-            // bookingPayload.duration = totalDuration;
-            // bookingPayload.price = totalPrice;
-            // bookingPayload.serviceName = data.services.map(s => s.name).join(" + ");
-        }
+        const batch = adminDb.batch();
 
-        // 4. Update User Profile with Phone Number (if missing)
-        // We do this in parallel to not block the main booking flow too much, 
-        // but we await it to ensure consistency if vital.
-        if (customerId && customerPhone) {
-            try {
-                const userRef = adminDb.collection('users').doc(customerId);
-                await userRef.set({ phoneNumber: customerPhone }, { merge: true });
-            } catch (err) {
-                console.warn("Failed to update user phone number:", err);
-                // Don't fail the booking if profile update fails
-            }
-        }
+        // A. Root Master (For Customer Queries & Global Analytics)
+        const rootRef = adminDb.collection('bookings').doc(bookingId);
+        batch.set(rootRef, bookingPayload);
 
-        // 5. Save to Firestore (Admin SDK bypasses client rules)
-        // This is the CRITICAL step. If this succeeds, the booking is "Done".
-        const docRef = await adminDb
+        // B. Vendor Copy (For Vendor Dashboard)
+        const vendorRef = adminDb
             .collection('users')
             .doc(vendorId)
             .collection('appointments')
-            .add(bookingPayload);
+            .doc(bookingId);
+        batch.set(vendorRef, bookingPayload);
 
-        // 🔔 Notify Vendor
-        try {
-            await sendNotification(vendorId, {
-                title: "New Appointment Request",
-                message: `A customer has booked ${data.serviceName} for ${data.date}.`, // Using raw string for now
-                type: 'info',
-                link: '/dashboard/bookings'
-            });
-        } catch (notifError) {
-            console.warn("Failed to notify vendor:", notifError);
+        // C. Customer Notification
+        const customerNotifRef = adminDb
+            .collection('users')
+            .doc(customerId)
+            .collection('notifications')
+            .doc();
+        batch.set(customerNotifRef, {
+            type: 'success',
+            title: 'Booking Sent',
+            message: `Your request for ${serviceName} is pending approval.`,
+            read: false,
+            createdAt: createdAt,
+            link: '/my-bookings'
+        });
+
+        // D. Vendor Notification
+        const vendorNotifRef = adminDb
+            .collection('users')
+            .doc(vendorId)
+            .collection('notifications')
+            .doc();
+        batch.set(vendorNotifRef, {
+            type: 'info',
+            title: 'New Appointment Request',
+            message: `${customerName} booked ${serviceName} for ${data.date} at ${data.time}.`,
+            read: false,
+            createdAt: createdAt,
+            link: '/dashboard/bookings'
+        });
+
+        // 4. Update User Profile with Phone Number (if missing)
+        if (customerId && customerPhone) {
+            const userRef = adminDb.collection('users').doc(customerId);
+            // We use update inside batch only if document exists, but here we prefer merge
+            // Merging inside batch is fine with set({ ... }, { merge: true })
+            batch.set(userRef, { phoneNumber: customerPhone }, { merge: true });
         }
 
-        // 6. Attempt Google Calendar Sync (Non-Blocking / Resilient)
-        // We race against a timeout so the UI doesn't hang.
+        // 5. Commit Batch
+        await batch.commit();
+
+        // 6. Attempt Google Calendar Sync (Non-Blocking)
         try {
             const SYNC_TIMEOUT_MS = 8000;
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error("Calendar sync timed out")), SYNC_TIMEOUT_MS)
             );
-
-            // We await the race to try and confirm status, but catch ALL errors
-            // so they don't propagate to the client as a 500.
             await Promise.race([
-                syncBookingToGoogle(docRef.id),
+                syncBookingToGoogle(rootRef.id), // Sync using Root or Vendor Ref ID (same ID)
                 timeoutPromise
             ]);
-
         } catch (syncError) {
-            // Log warning but DO NOT fail the request
             console.warn("Non-fatal error: Google Calendar sync failed/skipped.", syncError);
         }
 
-        return { success: true, id: docRef.id };
+        return { success: true, id: bookingId };
 
     } catch (error: any) {
         console.error("Booking Error:", error);
         throw new Error(error.message || "Failed to create booking.");
-
     }
 }
 

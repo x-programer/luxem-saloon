@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase/config";
-import { collectionGroup, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 
 export interface Booking {
     id: string;
@@ -30,7 +30,7 @@ export function useCustomerBookings(userId: string | undefined) {
         setLoading(true);
 
         const q = query(
-            collectionGroup(db, 'appointments'),
+            collection(db, 'bookings'), // 👈 UPDATED: Query Root Collection (Data now dual-written)
             where('customerId', '==', userId),
             orderBy('date', 'desc')
         );

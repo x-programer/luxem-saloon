@@ -11,7 +11,7 @@ import { auth, db } from "./firebase/config";
 import { useRouter } from "next/navigation";
 
 // Define the Admin Email
-const ADMIN_EMAIL = "ringtoneboy1530@gmail.com";
+export const ADMIN_EMAIL = "ringtoneboy1530@gmail.com";
 
 type UserRole = "admin" | "vendor" | null;
 

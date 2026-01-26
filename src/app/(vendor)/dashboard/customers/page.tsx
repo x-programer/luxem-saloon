@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase/config";
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { Loader2, User, Phone, Mail, Calendar, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
@@ -25,12 +25,10 @@ export default function CustomersPage() {
     useEffect(() => {
         if (!user) return;
 
-        // Fetch ALL appointments to aggregate on client (Standard NoSQL pattern for small-medium scale)
-        // Ideally, we would have a 'customers' collection updated via Cloud Functions triggers, 
-        // but for this scope, aggregation on read is acceptable.
+        // Fetch Appointments from Subcollection (Matches Server Actions)
         const q = query(
             collection(db, "users", user.uid, "appointments"),
-            orderBy("date", "desc") // Get latest first for easier Loop
+            orderBy("date", "desc")
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {

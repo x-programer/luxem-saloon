@@ -136,6 +136,7 @@ export default async function VendorProfilePage({ params }: { params: Promise<{ 
         businessName: vendorData.salonName || "Luxe Salon",
         description: vendorData.description || "Experience the pinnacle of beauty and wellness.",
         themePreference: vendorData.theme || 'royal',
+        themeColor: vendorData.themeColor || '#7C3AED', // 👈 Pass Custom Theme Color
         profileImage: vendorData.coverImage || "https://images.unsplash.com/photo-1600948836101-f9ffda59d250?q=80&w=1200&auto=format&fit=crop",
         banner: vendorData.banner || null,
         logo: vendorData.logo || null,
@@ -146,7 +147,7 @@ export default async function VendorProfilePage({ params }: { params: Promise<{ 
         staff: staff,
         products: products,
         schedule: vendorData.schedule || {},
-        isBookingEnabled: vendorData.isBookingEnabled !== false ? vendorData.isBookingEnabled : false,
+        isBookingEnabled: vendorData.isBookingEnabled || false,
         platformStatus: vendorData.platformStatus || 'active',
         externalLinks: vendorData.externalLinks || []
     };
