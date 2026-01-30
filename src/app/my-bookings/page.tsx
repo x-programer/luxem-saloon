@@ -360,7 +360,7 @@ export default function MyBookingsPage() {
                                                         <h3 className={cn("text-xl font-bold mb-1 group-hover:text-primary transition-colors", textMain)}>{booking.serviceName}</h3>
                                                         <div className="flex items-center gap-2 text-sm font-medium opacity-80" style={{ color: theme === 'dark' ? '#aaa' : '#666' }}>
                                                             <MapPin className="w-3.5 h-3.5" />
-                                                            <span>Luxe Salon, Downtown</span> {/* Placeholder for vendor name if not in booking object directly, assumed Luxe for now */}
+                                                            <span>Saloon Book, Downtown</span> {/* Placeholder for vendor name if not in booking object directly, assumed Saloon Book for now */}
                                                         </div>
                                                     </div>
                                                     <div className={cn(

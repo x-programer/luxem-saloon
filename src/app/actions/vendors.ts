@@ -50,7 +50,7 @@ async function fetchAllVendors(searchQuery?: string, searchCity?: string) {
             // Normalize City
             const vendorCity = (data.city || (data.address ? data.address.split(',')[1]?.trim() : "")).toLowerCase();
             const vendorAddress = (data.address || "").toLowerCase();
-            const businessName = (data.salonName || data.businessName || "Luxe Salon").toLowerCase();
+            const businessName = (data.salonName || data.businessName || "Saloon Book").toLowerCase();
 
             // 4. Filtering Logic
             let matchesQuery = true;
@@ -70,7 +70,7 @@ async function fetchAllVendors(searchQuery?: string, searchCity?: string) {
                 vendors.push({
                     id: doc.id,
                     slug: data.slug || doc.id,
-                    businessName: data.salonName || data.businessName || "Luxe Salon",
+                    businessName: data.salonName || data.businessName || "Saloon Book",
                     address: data.address || "",
                     city: data.city || (data.address ? data.address.split(',')[1]?.trim() : "Unknown City"),
                     coverImage: data.coverImage || "https://images.unsplash.com/photo-1521590832898-947c13a8ba3b?q=80&w=1200&auto=format&fit=crop",

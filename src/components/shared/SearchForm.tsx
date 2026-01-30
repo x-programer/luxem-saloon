@@ -52,15 +52,15 @@ export function SearchForm({ variant = "hero", className }: SearchFormProps) {
             className={cn(
                 "relative flex flex-col md:flex-row items-center gap-2 md:gap-0 w-full mx-auto",
                 isHero
-                    ? "max-w-2xl bg-white p-2 rounded-3xl shadow-xl shadow-indigo-500/10 border border-white/40 backdrop-blur-md"
-                    : "max-w-full bg-white/50 p-1.5 rounded-xl border border-white/40",
+                    ? "max-w-2xl bg-white p-2 rounded-3xl shadow-xl shadow-indigo-500/10 border border-white/40 backdrop-blur-md dark:bg-slate-900/50 dark:border-white/10"
+                    : "max-w-full bg-white/50 p-1.5 rounded-xl border border-white/40 dark:bg-slate-800/50 dark:border-white/10",
                 className
             )}
         >
             {/* Query Input */}
             <div className={cn(
                 "relative w-full flex-1 flex items-center px-4",
-                isHero ? "h-14 md:border-r border-gray-100" : "h-10"
+                isHero ? "h-14 md:border-r border-gray-100 dark:border-white/10" : "h-10"
             )}>
                 <Search className={cn("text-gray-400 mr-3", isHero ? "w-5 h-5" : "w-4 h-4")} />
                 <input
@@ -68,14 +68,14 @@ export function SearchForm({ variant = "hero", className }: SearchFormProps) {
                     placeholder="Search salons or services..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    className="w-full h-full bg-transparent border-none outline-none text-gray-800 placeholder:text-gray-400 text-sm md:text-base font-medium"
+                    className="w-full h-full bg-transparent border-none outline-none text-gray-800 placeholder:text-gray-400 text-sm md:text-base font-medium dark:text-white dark:placeholder:text-slate-500"
                 />
             </div>
 
             {/* City Input */}
             <div className={cn(
                 "relative w-full md:w-[35%] flex items-center px-4",
-                isHero ? "h-14" : "h-10 border-t md:border-l md:border-t-0 border-gray-100/50 md:pl-4" // Separator logic
+                isHero ? "h-14" : "h-10 border-t md:border-l md:border-t-0 border-gray-100/50 md:pl-4 dark:border-white/10" // Separator logic
             )}>
                 <MapPin className={cn("text-gray-400 mr-3", isHero ? "w-5 h-5" : "w-4 h-4")} />
                 <input
@@ -83,7 +83,7 @@ export function SearchForm({ variant = "hero", className }: SearchFormProps) {
                     placeholder={isHero ? "City or Zip" : "City"}
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
-                    className="w-full h-full bg-transparent border-none outline-none text-gray-800 placeholder:text-gray-400 text-sm md:text-base font-medium"
+                    className="w-full h-full bg-transparent border-none outline-none text-gray-800 placeholder:text-gray-400 text-sm md:text-base font-medium dark:text-white dark:placeholder:text-slate-500"
                 />
             </div>
 
@@ -94,7 +94,7 @@ export function SearchForm({ variant = "hero", className }: SearchFormProps) {
                 className={cn(
                     "relative flex items-center justify-center transition-all active:scale-95 disabled:opacity-70 disabled:active:scale-100",
                     isHero
-                        ? "w-full md:w-auto h-12 md:h-12 px-8 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02]"
+                        ? "w-full md:w-auto h-12 md:h-12 px-8 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] dark:border dark:border-white/20 bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 transition-opacity"
                         : "w-full md:w-auto h-9 px-4 bg-primary text-white text-sm font-semibold rounded-lg shadow-md"
                 )}
             >

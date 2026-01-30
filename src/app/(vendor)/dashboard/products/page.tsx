@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase/config";
 import { collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc } from "firebase/firestore";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, Trash2, ShoppingBag, Store, Pencil, X } from "lucide-react";
 import { ImageUploader } from "@/components/dashboard/ImageUploader";
 import { toast } from "sonner";
@@ -13,6 +14,10 @@ type ProductType = "retail" | "salon_use";
 
 export default function ProductsPage() {
     const { user } = useAuth();
+    const searchParams = useSearchParams();
+    const viewAsId = searchParams.get('viewAs');
+    const targetId = viewAsId || user?.uid;
+
     const [products, setProducts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<ProductType>("retail");
@@ -31,8 +36,8 @@ export default function ProductsPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        if (!user) return;
-        const unsubscribe = onSnapshot(collection(db, "users", user.uid, "products"), (snap) => {
+        if (!targetId) return;
+        const unsubscribe = onSnapshot(collection(db, "users", targetId, "products"), (snap) => {
             setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
         }, (error) => {
@@ -40,11 +45,11 @@ export default function ProductsPage() {
             setLoading(false);
         });
         return () => unsubscribe();
-    }, [user]);
+    }, [user, targetId]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return;
+        if (!targetId) return;
         setIsSubmitting(true);
 
         const payload = {
@@ -58,11 +63,11 @@ export default function ProductsPage() {
         try {
             if (editingId) {
                 // Update Existing
-                await updateDoc(doc(db, "users", user.uid, "products", editingId), payload);
+                await updateDoc(doc(db, "users", targetId, "products", editingId), payload);
                 toast.success("Product updated successfully");
             } else {
                 // Create New
-                await addDoc(collection(db, "users", user.uid, "products"), {
+                await addDoc(collection(db, "users", targetId, "products"), {
                     ...payload,
                     createdAt: new Date()
                 });
@@ -77,9 +82,9 @@ export default function ProductsPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!user || !confirm("Delete this product?")) return;
+        if (!targetId || !confirm("Delete this product?")) return;
         try {
-            await deleteDoc(doc(db, "users", user.uid, "products", id));
+            await deleteDoc(doc(db, "users", targetId, "products", id));
             toast.success("Product deleted");
         } catch (error) {
             toast.error("Delete failed");

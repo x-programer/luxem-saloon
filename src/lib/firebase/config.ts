@@ -3,6 +3,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
+import { getAnalytics, isSupported } from "firebase/analytics";
 // 1. Import App Check
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
@@ -22,8 +23,25 @@ const db = getFirestore(app);
 const functions = getFunctions(app);
 const storage = getStorage(app);
 
-// 2. Initialize App Check (Client-Side Only)
+let analytics: any;
+
+// 2. Initialize Analytics (Client-Side Only)
 if (typeof window !== "undefined") {
+    isSupported().then((supported) => {
+        if (supported) {
+            analytics = getAnalytics(app);
+        }
+    });
+}
+
+// 3. Initialize App Check (Client-Side Only)
+if (typeof window !== "undefined") {
+    // Enable debug token in development environment
+    if (process.env.NODE_ENV === 'development') {
+        // @ts-ignore
+        self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+
     // Use a variable to ensure the key exists
     const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
 
@@ -33,9 +51,10 @@ if (typeof window !== "undefined") {
                 provider: new ReCaptchaV3Provider(siteKey),
                 isTokenAutoRefreshEnabled: true,
             });
-            console.log("🛡️ App Check initialized successfully.");
         } catch (error) {
-            console.error("Error initializing App Check:", error);
+            if (process.env.NODE_ENV === 'development') {
+                console.warn("App Check init failed (non-critical in dev):", error);
+            }
         }
     } else {
         console.warn("⚠️ App Check skipped: NEXT_PUBLIC_RECAPTCHA_SITE_KEY is missing in .env.local");
@@ -48,4 +67,4 @@ if (typeof window !== "undefined") {
 //    connectStorageEmulator(storage, "localhost", 9199);
 // }
 
-export { app, auth, db, functions, storage };
+export { app, auth, db, functions, storage, analytics };

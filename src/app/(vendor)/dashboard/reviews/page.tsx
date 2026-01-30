@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase/config";
 import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Star, MessageSquare, Trash2, TrendingUp, AlertCircle } from "lucide-react";
 import { deleteReview } from "@/app/actions/review-actions";
 import { toast } from "sonner";
@@ -11,15 +12,19 @@ import { formatDistanceToNow } from "date-fns";
 
 export default function ReviewsPage() {
     const { user } = useAuth();
+    const searchParams = useSearchParams();
+    const viewAsId = searchParams.get('viewAs');
+    const targetId = viewAsId || user?.uid;
+
     const [reviews, setReviews] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!user) return;
+        if (!targetId) return;
 
         const q = query(
             collection(db, "reviews"),
-            where("vendorId", "==", user.uid),
+            where("vendorId", "==", targetId),
             orderBy("createdAt", "desc")
         );
 
@@ -30,13 +35,13 @@ export default function ReviewsPage() {
         });
 
         return () => unsubscribe();
-    }, [user]);
+    }, [user, targetId]);
 
     const handleDelete = async (reviewId: string) => {
-        if (!user) return;
+        if (!targetId) return;
         if (!confirm("Delete this review? This action cannot be undone.")) return;
 
-        const result = await deleteReview(reviewId, user.uid);
+        const result = await deleteReview(reviewId, targetId);
         if (result.success) {
             toast.success("Review removed");
         } else {

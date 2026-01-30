@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, Palette, Store, MapPin, Check, Loader2, Save, CheckCircle2, Clock, Calendar, AlertCircle, LayoutTemplate, Sparkles, Image as ImageIcon, ArrowLeft } from "lucide-react";
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
+import { Store, Palette, Clock, MapPin, Check, Loader2, Save, CheckCircle2, AlertCircle, LayoutTemplate, Sparkles, ArrowLeft, Calendar, ExternalLink } from "lucide-react";
+import { doc, updateDoc, collection, query, where, getDocs, onSnapshot } from "firebase/firestore";
 import { ImageUploader } from "@/components/dashboard/ImageUploader";
 import { db } from "@/lib/firebase/config";
 import { useAuth } from "@/lib/auth-context";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ExternalLinksManager } from "@/components/dashboard/ExternalLinksManager";
 import { CalendarConnect } from "@/components/dashboard/CalendarConnect";
+import { getCoordinates } from "@/app/actions/get-coordinates";
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState("details");
@@ -26,17 +27,23 @@ export default function SettingsPage() {
 
     // Auth & Navigation
     const { user } = useAuth();
-    const router = useRouter();
+    const searchParams = useSearchParams();
+    const viewAsId = searchParams.get('viewAs');
+    const targetId = viewAsId || user?.uid;
 
     // Real-time State
-    const [salonName, setSalonName] = useState("Luxe Studio");
+    const [salonName, setSalonName] = useState("Saloon Studio");
     const [tagline, setTagline] = useState("Experience Royalty");
     const [logo, setLogo] = useState("");
     const [banner, setBanner] = useState("");
     const [showLogo, setShowLogo] = useState(true);
-    const [address, setAddress] = useState("123 Fashion Ave, NY");
+    const [address, setAddress] = useState("");
+
+    // 🌍 NEW: Coordinate State for Visual Feedback
+    const [coords, setCoords] = useState<{ lat: number | null, lng: number | null }>({ lat: null, lng: null });
+
     const [theme, setTheme] = useState("royal");
-    const [themeColor, setThemeColor] = useState("#7C3AED"); // Default Purple
+    const [themeColor, setThemeColor] = useState("#7C3AED");
     const [externalLinks, setExternalLinks] = useState<any[]>([]);
 
     // Booking State
@@ -53,9 +60,9 @@ export default function SettingsPage() {
 
     // Fetch Data
     useEffect(() => {
-        if (!user) return;
+        if (!targetId) return;
 
-        const docRef = doc(db, "users", user.uid);
+        const docRef = doc(db, "users", targetId);
         const unsubscribe = onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
@@ -69,6 +76,12 @@ export default function SettingsPage() {
                 if (data.showLogo !== undefined) setShowLogo(data.showLogo);
                 if (data.tagline) setTagline(data.tagline);
                 if (data.address) setAddress(data.address);
+
+                // Load existing coordinates
+                if (data.latitude && data.longitude) {
+                    setCoords({ lat: data.latitude, lng: data.longitude });
+                }
+
                 if (data.theme) setTheme(data.theme);
                 if (data.themeColor) setThemeColor(data.themeColor);
                 if (data.isBookingEnabled !== undefined) setIsBookingEnabled(data.isBookingEnabled);
@@ -78,7 +91,7 @@ export default function SettingsPage() {
         });
 
         return () => unsubscribe();
-    }, [user]);
+    }, [user, targetId]);
 
     // Check Slug Availability
     const checkSlugAvailability = async (currentSlug: string) => {
@@ -107,7 +120,6 @@ export default function SettingsPage() {
         }
     };
 
-    // Handle Slug Input Change
     const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newSlug = e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
         setSlug(newSlug);
@@ -116,14 +128,14 @@ export default function SettingsPage() {
 
     // Save Data Handler
     const handleSave = async () => {
-        if (!user) return;
+        if (!targetId) return;
         const isSlugValid = await checkSlugAvailability(slug);
         if (!isSlugValid) return;
 
         setIsSaving(true);
         try {
-            const docRef = doc(db, "users", user.uid);
-            await updateDoc(docRef, {
+            const docRef = doc(db, "users", targetId);
+            const updateData: any = {
                 salonName,
                 slug,
                 logo,
@@ -132,11 +144,34 @@ export default function SettingsPage() {
                 tagline,
                 address,
                 theme,
-                themeColor, // Save the custom color
+                themeColor,
                 isBookingEnabled,
                 schedule,
                 updatedAt: new Date()
-            });
+            };
+
+
+
+            // 🌍 GEOCODING LOGIC
+            // 1. If user provided manual coords, save them directly.
+            if (coords.lat && coords.lng) {
+                (updateData as any).latitude = parseFloat(coords.lat.toString());
+                (updateData as any).longitude = parseFloat(coords.lng.toString());
+            }
+            // 2. Only auto-fetch if address exists AND coords are missing
+            else if (address) {
+                console.log("Fetching coordinates for:", address);
+                const newCoords = await getCoordinates(address);
+
+                if (newCoords) {
+                    (updateData as any).latitude = newCoords.lat;
+                    (updateData as any).longitude = newCoords.lng;
+                    // Update local state immediately so user sees the change
+                    setCoords(newCoords);
+                }
+            }
+
+            await updateDoc(docRef, updateData);
 
             setOriginalSlug(slug);
             setShowSuccess(true);
@@ -277,7 +312,7 @@ export default function SettingsPage() {
                                     <div className="space-y-2">
                                         <label className="text-sm font-bold text-gray-700 ml-1">Profile URL</label>
                                         <div className="relative group">
-                                            <div className="absolute left-4 top-[17px] text-gray-400 text-sm font-mono font-medium">luxe.com/</div>
+                                            <div className="absolute left-4 top-[17px] text-gray-400 text-sm font-mono font-medium">saloon.book/</div>
                                             <input
                                                 value={slug}
                                                 onChange={handleSlugChange}
@@ -301,7 +336,7 @@ export default function SettingsPage() {
                                                 <AlertCircle className="w-3.5 h-3.5" /> {slugError}
                                             </p>
                                         ) : (
-                                            <p className="text-xs text-gray-400 font-medium ml-1">Visible at: <span className="text-[#6F2DBD]">luxe.com/{slug || '...'}</span></p>
+                                            <p className="text-xs text-gray-400 font-medium ml-1">Visible at: <span className="text-[#6F2DBD]">saloon.book/{slug || '...'}</span></p>
                                         )}
                                     </div>
                                     <div className="flex items-end pb-1">
@@ -341,6 +376,50 @@ export default function SettingsPage() {
                                             onChange={(e) => setAddress(e.target.value)}
                                             className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white border border-gray-100 text-gray-900 font-medium focus:outline-none focus:ring-4 focus:ring-[#6F2DBD]/10 focus:border-[#6F2DBD] transition-all shadow-sm"
                                         />
+                                    </div>
+
+                                    {/* 🌍 COORDINATES VISUAL FEEDBACK & MANUAL INPUT */}
+                                    <div className="ml-1 mt-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Map Coordinates</label>
+                                            <a
+                                                href="https://www.google.com/maps"
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="text-[10px] font-bold text-[#6F2DBD] hover:underline flex items-center gap-1"
+                                            >
+                                                Open Google Maps <ExternalLink className="w-3 h-3" />
+                                            </a>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3 mb-2">
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-400 mb-1 block">Latitude</label>
+                                                <input
+                                                    type="number"
+                                                    step="any"
+                                                    placeholder="e.g. 12.9716"
+                                                    value={coords.lat ?? ""}
+                                                    onChange={(e) => setCoords(prev => ({ ...prev, lat: parseFloat(e.target.value) || null }))}
+                                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-mono font-medium focus:ring-2 focus:ring-[#6F2DBD]/10 focus:border-[#6F2DBD] outline-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-400 mb-1 block">Longitude</label>
+                                                <input
+                                                    type="number"
+                                                    step="any"
+                                                    placeholder="e.g. 77.5946"
+                                                    value={coords.lng ?? ""}
+                                                    onChange={(e) => setCoords(prev => ({ ...prev, lng: parseFloat(e.target.value) || null }))}
+                                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-mono font-medium focus:ring-2 focus:ring-[#6F2DBD]/10 focus:border-[#6F2DBD] outline-none"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <p className="text-[10px] text-gray-400 leading-relaxed">
+                                            If the map isn&apos;t finding your location, right-click your spot on Google Maps, copy the numbers (Lat, Lng), and paste them here.
+                                        </p>
                                     </div>
                                 </div>
                             </motion.div>

@@ -39,12 +39,12 @@ export async function generateMetadata({ params }: { params: Promise<{ vendor_sl
 
     if (!vendorData) {
         return {
-            title: "Luxe Salon | Book Online",
+            title: "Saloon Book | Book Online",
         }
     }
 
     return {
-        title: `${vendorData.salonName || "Luxe Salon"} | Book Online`,
+        title: `${vendorData.salonName || "Saloon Book"} | Book Online`,
         description: vendorData.description || "Book your appointment online.",
         openGraph: {
             title: vendorData.salonName,
@@ -133,7 +133,7 @@ export default async function VendorProfilePage({ params }: { params: Promise<{ 
     // Construct full object
     const fullVendorProfile = {
         uid: vendorData.id,
-        businessName: vendorData.salonName || "Luxe Salon",
+        businessName: vendorData.salonName || "Saloon Book",
         description: vendorData.description || "Experience the pinnacle of beauty and wellness.",
         themePreference: vendorData.theme || 'royal',
         themeColor: vendorData.themeColor || '#7C3AED', // 👈 Pass Custom Theme Color

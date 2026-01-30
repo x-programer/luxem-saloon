@@ -11,8 +11,14 @@ import { ServiceCard } from "@/components/dashboard/ServiceCard";
 import { ServiceDetailsModal } from "@/components/dashboard/ServiceDetailsModal";
 import { toast } from "sonner";
 
+import { useSearchParams } from "next/navigation";
+
 export default function ServicesPage() {
     const { user, loading } = useAuth();
+    const searchParams = useSearchParams();
+    const viewAsId = searchParams.get("viewAs");
+    const targetId = viewAsId || user?.uid;
+
     const [services, setServices] = useState<any[]>([]);
     const [offers, setOffers] = useState<any[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
@@ -26,12 +32,12 @@ export default function ServicesPage() {
     const [offerValidUntil, setOfferValidUntil] = useState("");
 
     useEffect(() => {
-        if (!user) return;
+        if (!targetId) return;
 
         // Query services
         const qServices = query(
             collection(db, "services"),
-            where("uid", "==", user.uid)
+            where("uid", "==", targetId)
         );
 
         const unsubscribeServices = onSnapshot(qServices, (snapshot) => {
@@ -43,7 +49,7 @@ export default function ServicesPage() {
         });
 
         // Query offers - Assuming offers are stored in a subcollection 'offers' under the user
-        const qOffers = query(collection(db, "users", user.uid, "offers"));
+        const qOffers = query(collection(db, "users", targetId, "offers"));
 
         const unsubscribeOffers = onSnapshot(qOffers, (snapshot) => {
             const data = snapshot.docs.map(doc => ({
@@ -61,14 +67,14 @@ export default function ServicesPage() {
             unsubscribeServices();
             unsubscribeOffers();
         };
-    }, [user]);
+    }, [user, targetId]);
 
     const handleCreateOffer = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return;
+        if (!targetId) return;
 
         try {
-            await addDoc(collection(db, "users", user.uid, "offers"), {
+            await addDoc(collection(db, "users", targetId, "offers"), {
                 code: offerCode.toUpperCase(),
                 discount: Number(offerDiscount),
                 validUntil: offerValidUntil,
@@ -87,9 +93,9 @@ export default function ServicesPage() {
     };
 
     const toggleOfferStatus = async (offerId: string, currentStatus: boolean) => {
-        if (!user) return;
+        if (!targetId) return;
         try {
-            await updateDoc(doc(db, "users", user.uid, "offers", offerId), {
+            await updateDoc(doc(db, "users", targetId, "offers", offerId), {
                 isActive: !currentStatus
             });
         } catch (error) {
@@ -98,10 +104,10 @@ export default function ServicesPage() {
     };
 
     const deleteOffer = async (offerId: string) => {
-        if (!user) return;
+        if (!targetId) return;
         if (!confirm("Are you sure you want to delete this offer?")) return;
         try {
-            await deleteDoc(doc(db, "users", user.uid, "offers", offerId));
+            await deleteDoc(doc(db, "users", targetId, "offers", offerId));
             toast.success("Offer deleted");
         } catch (error) {
             toast.error("Failed to delete offer");
@@ -143,7 +149,7 @@ export default function ServicesPage() {
                 <>
                     <div className="flex justify-end relative z-10">
                         <Link
-                            href="/dashboard/services/new"
+                            href={viewAsId ? `/dashboard/services/new?viewAs=${viewAsId}` : "/dashboard/services/new"}
                             className="bg-[#6F2DBD] text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-[#5a2499] shadow-lg shadow-purple-200 transition-all flex items-center gap-2"
                         >
                             <Plus className="w-4 h-4" />
@@ -161,7 +167,7 @@ export default function ServicesPage() {
                                 Create your first service package to start showcasing your offerings to clients.
                             </p>
                             <Link
-                                href="/dashboard/services/new"
+                                href={viewAsId ? `/dashboard/services/new?viewAs=${viewAsId}` : "/dashboard/services/new"}
                                 className="text-[#6F2DBD] font-bold hover:underline"
                             >
                                 Create your first service &rarr;

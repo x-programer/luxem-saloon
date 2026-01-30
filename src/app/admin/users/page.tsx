@@ -6,19 +6,30 @@ import { useRouter } from "next/navigation";
 import { AdminUserTable } from "@/components/admin/AdminUserTable";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
-import { Loader2 } from "lucide-react";
+import { Loader2, Megaphone, Search, HelpCircle } from "lucide-react";
+import { BroadcastModal } from "@/components/admin/BroadcastModal";
 
 export default function AdminUsersPage() {
     const { user, role, loading } = useAuth();
     const router = useRouter();
+
+    // Data State
     const [users, setUsers] = useState<any[]>([]);
     const [fetching, setFetching] = useState(true);
     const [permissionDenied, setPermissionDenied] = useState(false);
 
+    // Filter State
+    const [searchTerm, setSearchTerm] = useState("");
+    const [roleFilter, setRoleFilter] = useState("all");
+    const [statusFilter, setStatusFilter] = useState("all");
+
+    // Modal State
+    const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
+
     useEffect(() => {
         if (!loading) {
             if (!user || role !== 'admin') {
-                router.push('/dashboard'); // or /login
+                router.push('/dashboard');
             } else {
                 fetchUsers();
             }
@@ -26,9 +37,6 @@ export default function AdminUsersPage() {
     }, [user, role, loading, router]);
 
     const fetchUsers = async () => {
-        // STRICT SECURITY CHECK
-        // Even if role is admin, ensure email matches HARDCODED admin email
-        // This matches Firestore security rules: request.auth.token.email == 'ringtoneboy1530@gmail.com'
         if (user?.email !== ADMIN_EMAIL) {
             console.warn("Security Alert: Admin role present but email does not match allowlist.");
             setPermissionDenied(true);
@@ -37,20 +45,16 @@ export default function AdminUsersPage() {
         }
 
         try {
-            // Fetch all users
-            // In production with 1000s of users, this should use pagination and server-side filtering
             const q = query(collection(db, "users"), orderBy('createdAt', 'desc'));
             const snapshot = await getDocs(q);
             const userData = snapshot.docs.map(doc => ({
                 uid: doc.id,
                 ...doc.data(),
-                // normalize fields if needed
                 platformStatus: doc.data().platformStatus || 'active'
             }));
             setUsers(userData);
         } catch (error: any) {
             console.error("Error fetching users:", error);
-            // Handle permission denied from Firestore
             if (error.code === 'permission-denied' || error.message?.includes('Missing Permissions')) {
                 setPermissionDenied(true);
             }
@@ -58,6 +62,22 @@ export default function AdminUsersPage() {
             setFetching(false);
         }
     };
+
+    // --- Client-Side Filtering ---
+    const filteredUsers = users.filter(user => {
+        // 1. Search (Name OR Email)
+        const matchSearch = searchTerm === "" ||
+            (user.displayName?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (user.email?.toLowerCase().includes(searchTerm.toLowerCase()));
+
+        // 2. Role
+        const matchRole = roleFilter === "all" || user.role === roleFilter;
+
+        // 3. Status
+        const matchStatus = statusFilter === "all" || user.platformStatus === statusFilter;
+
+        return matchSearch && matchRole && matchStatus;
+    });
 
     if (loading || (role === 'admin' && fetching)) {
         return (
@@ -67,7 +87,7 @@ export default function AdminUsersPage() {
         );
     }
 
-    if (role !== 'admin') return null; // blocked by effect
+    if (role !== 'admin') return null;
 
     if (permissionDenied) {
         return (
@@ -80,14 +100,9 @@ export default function AdminUsersPage() {
                     </div>
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
                     <p className="text-gray-600 mb-6">
-                        You have the Admin role, but your email address ({user?.email}) is not authorized to view sensitive user data.
+                        Auth mismatch for {user?.email}
                     </p>
-                    <button
-                        onClick={() => router.push('/dashboard')}
-                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900"
-                    >
-                        Return to Dashboard
-                    </button>
+                    <button onClick={() => router.push('/dashboard')} className="btn-primary">Back</button>
                 </div>
             </div>
         )
@@ -96,17 +111,35 @@ export default function AdminUsersPage() {
     return (
         <div className="min-h-screen bg-gray-50 p-8">
             <div className="max-w-7xl mx-auto space-y-8">
+                {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900 tracking-tight">User Management</h1>
                         <p className="text-gray-500 mt-1">Manage vendor permissions, shadow bans, and suspensions.</p>
                     </div>
-                    <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200 text-sm font-medium text-gray-600">
-                        Total Users: {users.length}
+                    <div className="flex items-center gap-4">
+                        <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200 text-sm font-medium text-gray-600">
+                            Total Users: {users.length}
+                        </div>
+                        <button
+                            onClick={() => setIsBroadcastOpen(true)}
+                            className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg font-bold shadow-md shadow-violet-200 transition-all flex items-center gap-2"
+                        >
+                            <Megaphone className="w-4 h-4" />
+                            Broadcast Alert
+                        </button>
+                        <button
+                            onClick={() => router.push('/admin/support')}
+                            className="bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-bold shadow-sm border border-gray-200 transition-all flex items-center gap-2"
+                        >
+                            <HelpCircle className="w-4 h-4" />
+                            Support Tickets
+                        </button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                         <div className="text-sm font-medium text-gray-500 mb-1">Active Vendors</div>
                         <div className="text-3xl font-bold text-gray-900">
@@ -127,7 +160,57 @@ export default function AdminUsersPage() {
                     </div>
                 </div>
 
-                <AdminUserTable data={users} />
+                {/* 🛠️ FILTER TOOLBAR 🛠️ */}
+                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-center">
+                    {/* Search */}
+                    <div className="flex-1 w-full relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Search by Name or Email..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50 transition-all"
+                        />
+                    </div>
+
+                    {/* Role Filter */}
+                    <div className="w-full md:w-48">
+                        <select
+                            value={roleFilter}
+                            onChange={(e) => setRoleFilter(e.target.value)}
+                            className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50 bg-white"
+                        >
+                            <option value="all">All Roles</option>
+                            <option value="vendor">Vendors</option>
+                            <option value="customer">Customers</option>
+                            <option value="admin">Admins</option>
+                        </select>
+                    </div>
+
+                    {/* Status Filter */}
+                    <div className="w-full md:w-48">
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-500/50 bg-white"
+                        >
+                            <option value="all">All Statuses</option>
+                            <option value="active">Active</option>
+                            <option value="suspended">Suspended</option>
+                            <option value="shadow_banned">Shadow Banned</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* Table with Filtered Data */}
+                <AdminUserTable data={filteredUsers} />
+
+                {/* Broadcast Modal */}
+                <BroadcastModal
+                    isOpen={isBroadcastOpen}
+                    onClose={() => setIsBroadcastOpen(false)}
+                />
             </div>
         </div>
     );

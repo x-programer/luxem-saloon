@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase/config";
 import { collection, onSnapshot, addDoc, deleteDoc, doc } from "firebase/firestore";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { ImageUploader } from "@/components/dashboard/ImageUploader";
 import { toast } from "sonner";
@@ -12,6 +13,10 @@ import { DeleteConfirmationModal } from "@/components/ui/DeleteConfirmationModal
 
 export default function TeamPage() {
     const { user } = useAuth();
+    const searchParams = useSearchParams();
+    const viewAsId = searchParams.get('viewAs');
+    const targetId = viewAsId || user?.uid;
+
     const [staff, setStaff] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -27,21 +32,21 @@ export default function TeamPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        if (!user) return;
-        const unsubscribe = onSnapshot(collection(db, "users", user.uid, "staff"), (snap) => {
+        if (!targetId) return;
+        const unsubscribe = onSnapshot(collection(db, "users", targetId, "staff"), (snap) => {
             setStaff(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
         });
         return () => unsubscribe();
-    }, [user]);
+    }, [user, targetId]);
 
     const handleAddStaff = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return;
+        if (!targetId) return;
 
         setIsSubmitting(true);
         try {
-            await addDoc(collection(db, "users", user.uid, "staff"), {
+            await addDoc(collection(db, "users", targetId, "staff"), {
                 name,
                 role,
                 specialties: specialties.split(',').map(s => s.trim()).filter(Boolean),
@@ -63,9 +68,9 @@ export default function TeamPage() {
     };
 
     const handleConfirmDelete = async () => {
-        if (!user || !staffToDelete) return;
+        if (!targetId || !staffToDelete) return;
 
-        await deleteDoc(doc(db, "users", user.uid, "staff", staffToDelete.id));
+        await deleteDoc(doc(db, "users", targetId, "staff", staffToDelete.id));
         toast.success("Staff member removed successfully");
         setStaffToDelete(null);
     };

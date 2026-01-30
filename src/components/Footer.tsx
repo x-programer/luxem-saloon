@@ -6,14 +6,14 @@ export function Footer() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="text-center md:text-left">
-                        <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-luxe-secondary">LuxeSalon</span>
-                        <p className="text-sm text-textMain/60 mt-2 font-medium">© 2026 LuxeSalon Inc.</p>
+                        <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-luxe-secondary">SaloonBook</span>
+                        <p className="text-sm text-textMain/60 mt-2 font-medium">© 2026 Saloon Book Inc.</p>
                     </div>
 
                     <div className="flex items-center gap-8">
-                        <Link href="#" className="text-sm font-medium text-textMain/60 hover:text-primary transition-colors">Privacy</Link>
-                        <Link href="#" className="text-sm font-medium text-textMain/60 hover:text-primary transition-colors">Terms</Link>
-                        <Link href="#" className="text-sm font-medium text-textMain/60 hover:text-primary transition-colors">Contact</Link>
+                        <Link href="/privacy" className="text-sm font-medium text-textMain/60 hover:text-primary transition-colors">Privacy</Link>
+                        <Link href="/terms" className="text-sm font-medium text-textMain/60 hover:text-primary transition-colors">Terms</Link>
+                        <Link href="/contact" className="text-sm font-medium text-textMain/60 hover:text-primary transition-colors">Contact</Link>
                     </div>
 
                     <div className="flex items-center gap-4">

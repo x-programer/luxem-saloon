@@ -9,9 +9,14 @@ import { getAggregatedClients, ClientStats, deleteClientAction } from "@/app/act
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { DeleteConfirmationModal } from "@/components/ui/DeleteConfirmationModal";
+import { useSearchParams } from "next/navigation";
 
 export default function ClientsPage() {
     const { user } = useAuth();
+    const searchParams = useSearchParams();
+    const viewAsId = searchParams.get('viewAs');
+    const targetId = viewAsId || user?.uid;
+
     const [clients, setClients] = useState<ClientStats[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -20,10 +25,10 @@ export default function ClientsPage() {
 
     // Fetch Clients Logic
     const fetchClients = async () => {
-        if (!user) return;
+        if (!targetId) return;
         setIsLoading(true);
         try {
-            const data = await getAggregatedClients(user.uid);
+            const data = await getAggregatedClients(targetId);
             setClients(data);
         } catch (error) {
             console.error("Failed to load clients", error);
@@ -34,7 +39,7 @@ export default function ClientsPage() {
 
     useEffect(() => {
         fetchClients();
-    }, [user]);
+    }, [user, targetId]);
 
     // Search Filter
     const filteredClients = clients.filter(client =>
@@ -66,10 +71,10 @@ export default function ClientsPage() {
     };
 
     const handleConfirmDelete = async () => {
-        if (!user || !clientToDelete) return;
+        if (!targetId || !clientToDelete) return;
 
         const appointmentIds = clientToDelete.history.map(h => h.id);
-        const result = await deleteClientAction(user.uid, appointmentIds);
+        const result = await deleteClientAction(targetId, appointmentIds);
 
         if (result.success) {
             toast.success("Client profile removed successfully");
@@ -236,7 +241,7 @@ export default function ClientsPage() {
                 isOpen={!!selectedClient}
                 onClose={() => setSelectedClient(null)}
                 client={selectedClient}
-                vendorUid={user?.uid || ""}
+                vendorUid={targetId || ""}
             />
 
             <DeleteConfirmationModal

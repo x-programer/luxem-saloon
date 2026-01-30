@@ -53,6 +53,11 @@ export function ServiceForm({ initialData, serviceId }: ServiceFormProps) {
     );
 
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isCustomCategory, setIsCustomCategory] = useState(() => {
+        if (!initialData?.category) return false;
+        const standardCategories = ["Hair", "Facial", "Massage", "Nails", "Makeup"];
+        return !standardCategories.includes(initialData.category);
+    });
 
     // Helper: Add new step
     const addStep = () => {
@@ -161,15 +166,42 @@ export function ServiceForm({ initialData, serviceId }: ServiceFormProps) {
                     <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">Category</label>
                         <select
-                            className="w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-[#6F2DBD]/20 focus:border-[#6F2DBD] text-sm py-3 px-4 bg-gray-50 focus:bg-white transition-all font-medium"
-                            value={formData.category}
-                            onChange={e => setFormData({ ...formData, category: e.target.value })}
+                            className="w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-[#6F2DBD]/20 focus:border-[#6F2DBD] text-sm py-3 px-4 bg-gray-50 focus:bg-white transition-all font-medium mb-2"
+                            value={formData.category} // Initially "Hair" or what was saved
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === "other") {
+                                    setIsCustomCategory(true);
+                                    setFormData({ ...formData, category: "" }); // Reset for text input
+                                } else {
+                                    setIsCustomCategory(false);
+                                    setFormData({ ...formData, category: val });
+                                }
+                            }}
                         >
                             <option value="Hair">Hair</option>
                             <option value="Facial">Facial</option>
                             <option value="Massage">Massage</option>
                             <option value="Nails">Nails</option>
+                            <option value="Makeup">Makeup</option>
+                            <option value="other">+ Create New Category</option>
                         </select>
+
+                        <AnimatePresence>
+                            {isCustomCategory && (
+                                <motion.input
+                                    initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                                    animate={{ opacity: 1, height: "auto", marginTop: 8 }}
+                                    exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                                    type="text"
+                                    required
+                                    className="w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-[#6F2DBD]/20 focus:border-[#6F2DBD] text-sm py-3 px-4 bg-white transition-all font-medium placeholder:text-gray-400"
+                                    placeholder="Enter custom category name..."
+                                    value={formData.category}
+                                    onChange={(e) => setFormData({ ...formData, category: e.target.value.charAt(0).toUpperCase() + e.target.value.slice(1) })} // Auto Captialization
+                                />
+                            )}
+                        </AnimatePresence>
                     </div>
 
                     <div>

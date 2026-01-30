@@ -72,7 +72,7 @@ export default function SignupPage() {
             >
                 <div className="text-center mb-8">
                     <h1 className="text-2xl font-bold text-textMain">Create Account</h1>
-                    <p className="text-textMuted mt-2">Join LuxeSalon to manage your business</p>
+                    <p className="text-textMuted mt-2">Join Saloon Book to manage your business</p>
                 </div>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -94,7 +94,7 @@ export default function SignupPage() {
                         <input
                             {...register("salonName", { required: "Salon name is required" })}
                             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary focus:outline-none transition-all"
-                            placeholder="Luxe Studio"
+                            placeholder="Saloon Studio"
                         />
                         {errors.salonName && <span className="text-red-500 text-xs mt-1">{errors.salonName.message as string}</span>}
                     </div>

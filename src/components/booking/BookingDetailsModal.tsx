@@ -108,7 +108,7 @@ export function BookingDetailsModal({ isOpen, onClose, booking }: BookingDetails
                                             <MapPin className="w-5 h-5 text-gray-400" />
                                         </div>
                                         <div>
-                                            <p className="font-bold text-white text-base">Luxe Salon</p>
+                                            <p className="font-bold text-white text-base">Saloon Book</p>
                                             <p className="text-gray-400 text-sm">Downtown District</p>
                                         </div>
                                     </div>

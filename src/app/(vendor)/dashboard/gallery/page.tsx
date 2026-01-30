@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase/config";
 import { doc, onSnapshot, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ImageUploader } from "@/components/dashboard/ImageUploader";
 import { Image as ImageIcon } from "lucide-react";
 import { GallerySkeleton } from "@/components/skeletons/GallerySkeleton";
@@ -12,14 +13,18 @@ import { motion } from "framer-motion";
 
 export default function GalleryPage() {
     const { user, loading } = useAuth();
+    const searchParams = useSearchParams();
+    const viewAsId = searchParams.get('viewAs');
+    const targetId = viewAsId || user?.uid;
+
     const [gallery, setGallery] = useState<string[]>([]);
     const [banner, setBanner] = useState<string>("");
     const [isLoadingData, setIsLoadingData] = useState(true);
 
     useEffect(() => {
-        if (!user) return;
+        if (!targetId) return;
 
-        const docRef = doc(db, "users", user.uid);
+        const docRef = doc(db, "users", targetId);
         const unsubscribe = onSnapshot(docRef, (doc) => {
             if (doc.exists()) {
                 const data = doc.data();
@@ -30,12 +35,12 @@ export default function GalleryPage() {
         });
 
         return () => unsubscribe();
-    }, [user]);
+    }, [user, targetId]);
 
     const handleAddImage = async (url: string) => {
-        if (!user) return;
+        if (!targetId) return;
         try {
-            await updateDoc(doc(db, "users", user.uid), {
+            await updateDoc(doc(db, "users", targetId), {
                 gallery: arrayUnion(url)
             });
             toast.success("Image added to gallery");
@@ -46,9 +51,9 @@ export default function GalleryPage() {
     };
 
     const handleRemoveImage = async (url: string) => {
-        if (!user) return;
+        if (!targetId) return;
         try {
-            await updateDoc(doc(db, "users", user.uid), {
+            await updateDoc(doc(db, "users", targetId), {
                 gallery: arrayRemove(url)
             });
         } catch (error) {
@@ -58,9 +63,9 @@ export default function GalleryPage() {
     };
 
     const handleBannerUpload = async (url: string) => {
-        if (!user) return;
+        if (!targetId) return;
         try {
-            await updateDoc(doc(db, "users", user.uid), {
+            await updateDoc(doc(db, "users", targetId), {
                 banner: url
             });
             toast.success("Banner updated");
@@ -71,9 +76,9 @@ export default function GalleryPage() {
     };
 
     const handleBannerRemove = async () => {
-        if (!user) return;
+        if (!targetId) return;
         try {
-            await updateDoc(doc(db, "users", user.uid), {
+            await updateDoc(doc(db, "users", targetId), {
                 banner: null
             });
             // ImageUploader handles API deletion

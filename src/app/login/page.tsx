@@ -170,7 +170,7 @@ export default function LoginPage() {
 
                 <div className="mt-8 pt-6 border-t border-gray-100 text-center">
                     <p className="text-sm text-gray-500 font-medium">
-                        New to LuxeSalon?{" "}
+                        New to Saloon Book?{" "}
                         <Link href="/signup" className="text-[#6F2DBD] font-bold hover:underline transition-all">
                             Create an account
                         </Link>

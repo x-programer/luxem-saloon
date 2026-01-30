@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
     useReactTable,
     getCoreRowModel,
@@ -8,32 +8,33 @@ import {
     createColumnHelper,
     getPaginationRowModel,
     getSortedRowModel,
-    getFilteredRowModel,
     SortingState,
 } from "@tanstack/react-table";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { toast } from "sonner";
-import { MoreHorizontal, ShieldAlert, ShieldCheck, Ban, EyeOff, BadgeCheck, LogIn, Edit2, Check, X } from "lucide-react";
+import { MoreHorizontal, ShieldCheck, Ban, EyeOff, BadgeCheck, LogIn, Edit2 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { toggleUserStatus, toggleUserVerification } from "@/app/actions/user-management";
 
+// --- Types ---
 type UserStatus = 'active' | 'shadow_banned' | 'suspended' | 'pending_verification';
 
 interface UserData {
     uid: string;
     email: string;
     displayName?: string;
-    photoUrl?: string; // or photoURL
+    photoUrl?: string;
     role: 'vendor' | 'client' | 'admin';
     platformStatus: UserStatus;
     isVerified?: boolean;
     platformFeePercent?: number;
-    createdAt?: any; // Timestamp
+    createdAt?: any;
     stats?: {
         totalBookings?: number;
-        totalSpent?: number; // for clients
-        totalRevenue?: number; // for vendors
+        totalSpent?: number;
+        totalRevenue?: number;
     };
 }
 
@@ -41,55 +42,94 @@ const columnHelper = createColumnHelper<UserData>();
 
 export function AdminUserTable({ data }: { data: UserData[] }) {
     const router = useRouter();
+    const [users, setUsers] = useState<UserData[]>(data);
     const [sorting, setSorting] = useState<SortingState>([]);
     const [loadingId, setLoadingId] = useState<string | null>(null);
     const [editingFeeId, setEditingFeeId] = useState<string | null>(null);
 
-    // Status Update Handler
+    // 🛡️ STALE DATA GUARD
+    // This Ref tracks the last time YOU made a change.
+    // If the server sends old data within 3 seconds of your change, we ignore it.
+    const lastLocalUpdate = useRef<number>(0);
+
+    useEffect(() => {
+        const timeSinceUpdate = Date.now() - lastLocalUpdate.current;
+
+        // If we modified data locally less than 3 seconds ago, ignore server updates
+        // to prevent the "flicker/revert" bug.
+        if (timeSinceUpdate < 3000) {
+            return;
+        }
+
+        setUsers(data);
+    }, [data]);
+
+
+    // --- Handlers ---
+
+    // 1. Status Change (Active/Suspended)
     const handleStatusChange = async (uid: string, newStatus: UserStatus) => {
         setLoadingId(uid);
+        lastLocalUpdate.current = Date.now(); // 🔒 Lock server sync
+
+        // Optimistic Update
+        const previousUsers = [...users];
+        setUsers(prev => prev.map(u => u.uid === uid ? { ...u, platformStatus: newStatus } : u));
+
         try {
-            await updateDoc(doc(db, "users", uid), {
-                platformStatus: newStatus
-            });
-            toast.success(`User status updated to ${newStatus}`);
+            const result = await toggleUserStatus(uid, newStatus);
+            if (result.success) {
+                toast.success(`User status updated to ${newStatus}`);
+                router.refresh(); // Background sync (blocked by our Guard if too fast)
+            } else {
+                throw new Error(result.error);
+            }
         } catch (error) {
             console.error("Failed to update status", error);
             toast.error("Failed to update status");
+            setUsers(previousUsers); // Revert
         } finally {
             setLoadingId(null);
         }
     };
 
-    // Verify Handler
+    // 2. Verification (Blue Tick)
     const handleVerify = async (uid: string, currentStatus: boolean) => {
-        setLoadingId(uid);
+        const newStatus = !currentStatus;
+        lastLocalUpdate.current = Date.now(); // 🔒 Lock server sync
+
+        // Optimistic Update
+        const previousUsers = [...users];
+        setUsers(prev => prev.map(u => u.uid === uid ? { ...u, isVerified: newStatus } : u));
+
         try {
-            await updateDoc(doc(db, "users", uid), {
-                isVerified: !currentStatus
-            });
-            toast.success(`User ${!currentStatus ? 'verified' : 'unverified'}`);
+            const result = await toggleUserVerification(uid, newStatus);
+            if (result.success) {
+                toast.success(`User ${newStatus ? 'verified' : 'unverified'}`);
+                router.refresh();
+            } else {
+                throw new Error(result.error);
+            }
         } catch (error) {
             console.error("Failed to update verification", error);
             toast.error("Failed to update verification");
-        } finally {
-            setLoadingId(null);
+            setUsers(previousUsers); // Revert
         }
     };
 
-    // Impersonation Handler
-    const handleImpersonate = (uid: string) => {
-        router.push(`/dashboard?impersonate=${uid}`);
-        toast.success("Impersonation mode activated");
-    };
-
-    // Commission Update Handler
+    // 3. Commission Fee
     const handleCommissionUpdate = async (uid: string, newFee: string) => {
         const fee = parseFloat(newFee);
         if (isNaN(fee) || fee < 0 || fee > 100) {
             toast.error("Invalid percentage");
             return;
         }
+
+        lastLocalUpdate.current = Date.now(); // 🔒 Lock server sync
+
+        // Optimistic Update
+        const previousUsers = [...users];
+        setUsers(prev => prev.map(u => u.uid === uid ? { ...u, platformFeePercent: fee } : u));
 
         try {
             await updateDoc(doc(db, "users", uid), {
@@ -100,9 +140,16 @@ export function AdminUserTable({ data }: { data: UserData[] }) {
         } catch (error) {
             console.error("Failed to update commission", error);
             toast.error("Failed to update commission");
+            setUsers(previousUsers); // Revert
         }
     };
 
+    const handleImpersonate = (uid: string) => {
+        router.push(`/dashboard?viewAs=${uid}`);
+        toast.success("Impersonation mode activated");
+    };
+
+    // --- Table Configuration ---
     const columns = [
         columnHelper.accessor("uid", {
             header: "User",
@@ -157,8 +204,7 @@ export function AdminUserTable({ data }: { data: UserData[] }) {
                     );
                 }
 
-                // Vendor specific view with commission logic
-                const commission = user.platformFeePercent ?? 10; // default 10%
+                const commission = user.platformFeePercent ?? 10;
                 const isEditing = editingFeeId === user.uid;
 
                 return (
@@ -169,7 +215,7 @@ export function AdminUserTable({ data }: { data: UserData[] }) {
                             {isEditing ? (
                                 <input
                                     autoFocus
-                                    className="w-12 px-1 py-0.5 text-xs border rounded"
+                                    className="w-12 px-1 py-0.5 text-xs border rounded focus:ring-2 focus:ring-blue-500 outline-none"
                                     defaultValue={commission}
                                     onBlur={() => setEditingFeeId(null)}
                                     onKeyDown={(e) => {
@@ -193,8 +239,7 @@ export function AdminUserTable({ data }: { data: UserData[] }) {
         columnHelper.accessor("createdAt", {
             header: "Joined",
             cell: (info) => {
-                const date = info.getValue(); // Firestore Timestamp usually
-                // Handle Firestore timestamp or ISO string
+                const date = info.getValue();
                 const dateObj = date?.toDate ? date.toDate() : new Date(date || Date.now());
                 return (
                     <span className="text-sm text-gray-500">
@@ -211,13 +256,13 @@ export function AdminUserTable({ data }: { data: UserData[] }) {
                 const isLoading = loadingId === uid;
 
                 return (
-                    <div className="relative group">
+                    <div className="relative group w-40">
                         <select
                             disabled={isLoading}
                             value={status}
                             onChange={(e) => handleStatusChange(uid, e.target.value as UserStatus)}
                             className={`
-                                appearance-none pl-8 pr-8 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider cursor-pointer transition-all border
+                                w-full appearance-none pl-8 pr-8 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider cursor-pointer transition-all border
                                 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-200
                                 ${status === 'active' ? 'bg-green-100 text-green-700 border-green-200 hover:bg-green-200' : ''}
                                 ${status === 'shadow_banned' ? 'bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200' : ''}
@@ -232,7 +277,6 @@ export function AdminUserTable({ data }: { data: UserData[] }) {
                             <option value="pending_verification">Pending</option>
                         </select>
 
-                        {/* Icon Overlay */}
                         <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
                             {status === 'active' && <ShieldCheck className="w-3.5 h-3.5 text-green-600" />}
                             {status === 'shadow_banned' && <EyeOff className="w-3.5 h-3.5 text-yellow-600" />}
@@ -250,7 +294,6 @@ export function AdminUserTable({ data }: { data: UserData[] }) {
                 const user = info.row.original;
                 return (
                     <div className="flex items-center gap-2">
-                        {/* Verify Button */}
                         {user.role === 'vendor' && (
                             <button
                                 onClick={() => handleVerify(user.uid, user.isVerified || false)}
@@ -264,7 +307,6 @@ export function AdminUserTable({ data }: { data: UserData[] }) {
                             </button>
                         )}
 
-                        {/* Impersonate Button */}
                         <button
                             onClick={() => handleImpersonate(user.uid)}
                             title="Login as User"
@@ -279,7 +321,7 @@ export function AdminUserTable({ data }: { data: UserData[] }) {
     ];
 
     const table = useReactTable({
-        data,
+        data: users,
         columns,
         state: {
             sorting,
@@ -337,10 +379,9 @@ export function AdminUserTable({ data }: { data: UserData[] }) {
                 </table>
             </div>
 
-            {/* Pagination / Footer */}
             <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/30">
                 <div className="text-xs text-gray-500">
-                    Showing {table.getRowModel().rows.length} of {data.length} users
+                    Showing {table.getRowModel().rows.length} of {users.length} users
                 </div>
                 <div className="flex gap-2">
                     <button

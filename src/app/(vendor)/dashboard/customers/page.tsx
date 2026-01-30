@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase/config";
 import { collection, onSnapshot, query, orderBy, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2, User, Phone, Mail, Calendar, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -19,15 +20,19 @@ interface CustomerStats {
 
 export default function CustomersPage() {
     const { user, loading } = useAuth();
+    const searchParams = useSearchParams();
+    const viewAsId = searchParams.get('viewAs');
+    const targetId = viewAsId || user?.uid;
+
     const [customers, setCustomers] = useState<CustomerStats[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
 
     useEffect(() => {
-        if (!user) return;
+        if (!targetId) return;
 
         // Fetch Appointments from Subcollection (Matches Server Actions)
         const q = query(
-            collection(db, "users", user.uid, "appointments"),
+            collection(db, "users", targetId, "appointments"),
             orderBy("date", "desc")
         );
 
@@ -70,7 +75,7 @@ export default function CustomersPage() {
         });
 
         return () => unsubscribe();
-    }, [user]);
+    }, [user, targetId]);
 
     if (loading || isLoadingData) {
         return (

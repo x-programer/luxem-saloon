@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase/config";
 import { collection, onSnapshot, query, orderBy, doc, updateDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
     Calendar as CalendarIcon, Loader2, Check, X, Clock,
     Search, Filter, Smartphone, MoreHorizontal, LayoutGrid, List
@@ -37,6 +38,10 @@ const TABS = [
 
 export default function BookingsPage() {
     const { user, loading } = useAuth();
+    const searchParams = useSearchParams();
+    const viewAsId = searchParams.get('viewAs');
+    const targetId = viewAsId || user?.uid;
+
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [activeTab, setActiveTab] = useState('pending');
@@ -45,10 +50,10 @@ export default function BookingsPage() {
 
     // 1. Real-Time Data Fetching
     useEffect(() => {
-        if (!user) return;
+        if (!targetId) return;
 
         const q = query(
-            collection(db, "users", user.uid, "appointments"),
+            collection(db, "users", targetId, "appointments"),
             orderBy("date", "desc")
         );
 
@@ -66,7 +71,7 @@ export default function BookingsPage() {
         });
 
         return () => unsubscribe();
-    }, [user]);
+    }, [user, targetId]);
 
     // 2. Client-Side Parsing & Safe Date
     const getSafeDate = (apt: Appointment) => {
@@ -95,10 +100,10 @@ export default function BookingsPage() {
 
     // 4. Action Handler
     const handleStatusUpdate = async (id: string, newStatus: string) => {
-        if (!user) return;
+        if (!targetId) return;
 
         try {
-            toast.promise(updateBookingStatus(id, newStatus, user.uid), {
+            toast.promise(updateBookingStatus(id, newStatus, targetId), {
                 loading: 'Updating...',
                 success: 'Status updated successfully!',
                 error: 'Failed to update status'

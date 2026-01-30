@@ -84,7 +84,7 @@ export default function VendorProfileLoader({ slug }: { slug: string }) {
 
                 setVendor({
                     uid: data.id,
-                    businessName: data.salonName || "Luxe Salon",
+                    businessName: data.salonName || "Saloon Book",
                     description: data.description || "Experience the pinnacle of beauty and wellness.",
                     themePreference: data.theme || 'royal',
                     profileImage: data.coverImage || "https://images.unsplash.com/photo-1600948836101-f9ffda59d250?q=80&w=1200&auto=format&fit=crop",

@@ -16,7 +16,7 @@ export function Hero() {
                     initial={{ opacity: 0, y: 40 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.8, ease: "easeOut" }}
-                    className="relative bg-white/20 backdrop-blur-2xl border border-white/40 shadow-[0_20px_50px_rgba(8,_112,_184,_0.05)] rounded-[3rem] p-8 md:p-12 lg:p-16 overflow-hidden max-w-6xl mx-auto"
+                    className="relative bg-white/80 backdrop-blur-xl border border-white/20 shadow-[0_20px_50px_rgba(8,_112,_184,_0.05)] rounded-[3rem] p-8 md:p-12 lg:p-16 overflow-hidden max-w-6xl mx-auto dark:bg-slate-900/60 dark:backdrop-blur-xl dark:border-white/10"
                 >
                     {/* Glass Reflection/Highlight */}
                     <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-50" />
@@ -35,15 +35,30 @@ export function Hero() {
                                 <span>v2.0 Now Available</span>
                             </motion.div>
 
+                            {/* 
+                                SEO Options:
+                                
+                                Option 1 (Selected):
+                                Headline: "The All-in-One Booking Platform for Modern Salons"
+                                Sub-headline: "Streamline appointments, manage staff, and grow your revenue with the smartest salon software. No subscriptions required."
+
+                                Option 2 (Action Oriented):
+                                Headline: "Simplify Scheduling. Grow Your Salon Business."
+                                Sub-headline: "Automate your bookings and showcase your portfolio to thousands of local clients. Try the modern standard for beauty professionals."
+
+                                Option 3 (Trust/Authority):
+                                Headline: "Powering the Next Generation of Beauty Businesses"
+                                Sub-headline: "From seamless booking to instant payouts—get the tools you need to run a successful salon, spa, or barbershop."
+                            */}
                             <motion.h1
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.6, delay: 0.3 }}
-                                className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-textMain leading-[1.1] mb-6 drop-shadow-sm"
+                                className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1] mb-6 drop-shadow-sm font-sans"
                             >
-                                The OS for <br />
-                                <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-luxe-secondary">
-                                    Modern Salons
+                                The All-in-One Booking Platform for <br />
+                                <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#6F2DBD] to-[#A663CC] dark:from-[#A78BFA] dark:to-[#E879F9]">
+                                    Saloon Book
                                 </span>
                             </motion.h1>
 
@@ -51,10 +66,10 @@ export function Hero() {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.6, delay: 0.4 }}
-                                className="text-xl text-textMuted/90 mb-10 leading-relaxed max-w-lg mx-auto lg:mx-0 font-medium"
+                                className="text-xl text-slate-600 dark:text-slate-400 mb-10 leading-relaxed max-w-lg mx-auto lg:mx-0 font-medium font-sans"
                             >
-                                Manage bookings, showcase your portfolio, and grow your brand.
-                                Designed for those who appreciate <span className="text-textMain font-semibold">imperceptible design</span>.
+                                Streamline appointments, manage staff, and grow your revenue with the smartest salon software.
+                                <span className="text-slate-900 font-semibold"> No subscriptions required.</span>
                             </motion.p>
 
                             <motion.div
@@ -73,7 +88,7 @@ export function Hero() {
                                             </div>
                                         ))}
                                     </div>
-                                    <p>Trusted by <span className="text-textMain font-bold">500+ Salons</span></p>
+                                    <p>Trusted by <span className="text-slate-900 dark:text-white font-bold">500+ Salons</span></p>
                                 </div>
                             </motion.div>
                         </div>
@@ -96,9 +111,9 @@ export function Hero() {
                                     {/* Header */}
                                     <div className="flex items-center justify-between mb-8 pb-6 border-b border-black/5">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-luxe-secondary flex items-center justify-center text-white font-bold text-lg shadow-lg">LS</div>
+                                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-luxe-secondary flex items-center justify-center text-white font-bold text-lg shadow-lg">SB</div>
                                             <div>
-                                                <h3 className="font-bold text-lg text-textMain">Luxe Salon</h3>
+                                                <h3 className="font-bold text-lg text-textMain">Saloon Book</h3>
                                                 <p className="text-xs font-semibold text-textMuted uppercase tracking-wide">Dashboard</p>
                                             </div>
                                         </div>

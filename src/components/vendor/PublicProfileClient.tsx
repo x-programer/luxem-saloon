@@ -2,12 +2,20 @@
 
 import { useState, useEffect, useRef } from "react";
 import { ThemeWrapper } from "@/components/theme/ThemeWrapper";
-import { Calendar, Clock, MapPin, Star, Share2, X, ShoppingBag, Instagram, Facebook, Globe, Youtube, Twitter, Quote, ArrowRight, Check, CheckCircle2, Sun, Moon } from "lucide-react";
+import { Calendar, Clock, MapPin, Star, Share2, X, ShoppingBag, Instagram, Facebook, Globe, Youtube, Twitter, Quote, ArrowRight, Check, CheckCircle2, Sun, Moon, Ban, BadgeCheck } from "lucide-react";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { BookingModal } from "./BookingModal";
 import { ReviewList } from "@/components/public/ReviewList";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { CompactServiceItem } from "./CompactServiceItem";
+import { ServiceCategoryNav } from "./ServiceCategoryNav";
+import dynamic from "next/dynamic";
+
+const LeafletMap = dynamic(() => import("@/components/ui/LeafletMap"), {
+    ssr: false,
+    loading: () => <div className="h-[300px] w-full bg-gray-100 animate-pulse rounded-xl" />
+});
 
 // --- Types ---
 interface Service {
@@ -37,6 +45,9 @@ interface VendorData {
     products?: any[];
     schedule: any;
     isBookingEnabled: boolean;
+    isVerified?: boolean;
+    latitude?: number;
+    longitude?: number;
     platformStatus?: 'active' | 'shadow_banned' | 'suspended' | 'pending_verification';
     externalLinks?: {
         id: string;
@@ -77,7 +88,10 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
             const scrollPos = window.scrollY + 200; // Offset
             if (galleryRef.current && scrollPos >= galleryRef.current.offsetTop) setActiveSection("gallery");
             else if (reviewsRef.current && scrollPos >= reviewsRef.current.offsetTop) setActiveSection("reviews");
+            if (galleryRef.current && scrollPos >= galleryRef.current.offsetTop) setActiveSection("gallery");
+            else if (reviewsRef.current && scrollPos >= reviewsRef.current.offsetTop) setActiveSection("reviews");
             else if (servicesRef.current && scrollPos >= servicesRef.current.offsetTop) setActiveSection("services");
+            else if (document.getElementById("location") && scrollPos >= document.getElementById("location")!.offsetTop) setActiveSection("location");
             else setActiveSection("about");
         };
         window.addEventListener("scroll", handleScroll);
@@ -87,8 +101,14 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
     const scrollTo = (id: string) => {
         const el = document.getElementById(id);
         if (el) {
-            const y = el.getBoundingClientRect().top + window.pageYOffset - 100;
-            window.scrollTo({ top: y, behavior: 'smooth' });
+            // Adjust offset for sticky headers
+            const offset = 120;
+            const bodyRect = document.body.getBoundingClientRect().top;
+            const elementRect = el.getBoundingClientRect().top;
+            const elementPosition = elementRect - bodyRect;
+            const offsetPosition = elementPosition - offset;
+
+            window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
         }
     };
 
@@ -101,10 +121,9 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
 
         console.log("🖱️ Toggling Service:", service.name);
 
-        // Respect Vendor Settings: If disabled, do not allow adding
-        if (!vendor.isBookingEnabled) {
-            console.warn("🚫 Booking is disabled by the vendor.");
-            // Optional: Add toast here if you have a toast library available in this scope
+        // Respect Vendor Settings: If disabled or suspended, do not allow adding
+        if (!vendor.isBookingEnabled || vendor.platformStatus === 'suspended' || vendor.platformStatus === 'shadow_banned') {
+            console.warn("🚫 Booking is disabled or vendor is suspended.");
             return;
         }
 
@@ -153,6 +172,18 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
                 {/* 1. HERO SECTION (Parallax) */}
                 <header className="relative h-[65vh] min-h-[500px] overflow-hidden">
                     <motion.div style={{ y: bannerY, opacity: opacityHero }} className="absolute inset-0 z-0">
+                        {/* SUSPENSION OVERLAY */}
+                        {(vendor.platformStatus === 'suspended' || vendor.platformStatus === 'shadow_banned') && (
+                            <div className="absolute inset-0 z-20 bg-black/80 backdrop-blur-sm flex items-center justify-center">
+                                <div className="text-center p-8 border border-white/10 rounded-3xl bg-[#121212] max-w-md mx-4">
+                                    <h2 className="text-3xl font-bold text-red-500 mb-4">Temporarily Closed</h2>
+                                    <p className="text-gray-400 mb-6">This vendor is currently unavailable for new bookings. Please check back later.</p>
+                                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-full text-sm font-bold uppercase tracking-wider">
+                                        <Ban className="w-4 h-4" /> Account Suspended
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <Image
                             src={vendor.banner || vendor.profileImage || "https://images.unsplash.com/photo-1600948836101-f9ffda59d250?auto=format&fit=crop&q=80"}
                             alt={vendor.businessName}
@@ -183,7 +214,11 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
                                     <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[rgb(var(--brand-rgb))]/20 backdrop-blur-md rounded-full text-[rgb(var(--brand-rgb))] text-xs font-bold border border-[rgb(var(--brand-rgb))]/20 uppercase tracking-widest shadow-lg">
                                         <Star className="w-3 h-3 fill-current" /> Premium Partner
                                     </span>
-                                    {vendor.isBookingEnabled ? (
+                                    {(vendor.platformStatus === 'suspended' || vendor.platformStatus === 'shadow_banned') ? (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-500/20 backdrop-blur-md rounded-full text-red-400 text-xs font-bold border border-red-500/20 uppercase tracking-widest">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" /> Unavailable
+                                        </span>
+                                    ) : vendor.isBookingEnabled ? (
                                         <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-500/20 backdrop-blur-md rounded-full text-green-400 text-xs font-bold border border-green-500/20 uppercase tracking-widest">
                                             <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> Open
                                         </span>
@@ -194,8 +229,11 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
                                     )}
                                 </div>
 
-                                <h1 className={cn("text-4xl md:text-7xl font-black mb-4 tracking-tight leading-none drop-shadow-lg", isDarkMode ? "text-white" : "text-gray-900")}>
+                                <h1 className={cn("text-4xl md:text-7xl font-black mb-4 tracking-tight leading-none drop-shadow-lg flex items-center gap-3", isDarkMode ? "text-white" : "text-gray-900")}>
                                     {vendor.businessName}
+                                    {vendor.isVerified && (
+                                        <BadgeCheck className="text-blue-500 w-8 h-8 md:w-12 md:h-12" />
+                                    )}
                                 </h1>
                                 <p className={cn("text-lg md:text-xl font-light max-w-2xl flex items-center gap-2", isDarkMode ? "text-white/80" : "text-gray-700")}>
                                     <MapPin className="w-4 h-4 text-[rgb(var(--brand-rgb))]" /> {vendor.address}
@@ -209,7 +247,7 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
                 <div className={cn("sticky top-0 z-40 backdrop-blur-xl border-b transition-colors duration-300", isDarkMode ? "bg-[#121212]/80 border-white/5" : "bg-white/80 border-gray-200")}>
                     <div className="container mx-auto px-4 md:px-8">
                         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-3">
-                            {['about', 'services', 'reviews', 'gallery'].map((section) => (
+                            {['about', 'location', 'services', 'reviews', 'gallery'].map((section) => (
                                 <button
                                     key={section}
                                     onClick={() => scrollTo(section)}
@@ -240,64 +278,66 @@ export default function PublicProfileClient({ vendor }: { vendor: VendorData }) 
                                 <p className={cn("text-lg leading-relaxed font-light", isDarkMode ? "text-gray-300" : "text-gray-600")}>{vendor.description}</p>
                             </section>
 
-                            {/* SERVICES (Grid Layout) */}
+                            {/* LOCATION (Map) */}
+                            {vendor.latitude && vendor.longitude && (
+                                <section id="location" className="scroll-mt-32">
+                                    <h2 className={cn("text-2xl font-bold mb-6 flex items-center gap-2", isDarkMode ? "text-white" : "text-gray-900")}>
+                                        Location & Hours
+                                    </h2>
+                                    <div className="rounded-3xl overflow-hidden border border-gray-200 shadow-sm">
+                                        <LeafletMap lat={vendor.latitude} lng={vendor.longitude} />
+
+                                        <div className={cn("p-6 flex flex-col md:flex-row justify-between items-center gap-4", isDarkMode ? "bg-[#1A1A1A] border-t border-white/10" : "bg-white border-t border-gray-100")}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={cn("p-3 rounded-full", isDarkMode ? "bg-white/10 text-white" : "bg-gray-100 text-gray-900")}>
+                                                    <MapPin className="w-5 h-5" />
+                                                </div>
+                                                <div>
+                                                    <p className={cn("font-bold text-sm", isDarkMode ? "text-white" : "text-gray-900")}>{vendor.address}</p>
+                                                    <p className="text-xs text-gray-500">Get directions to the salon</p>
+                                                </div>
+                                            </div>
+                                            <a
+                                                href={`https://www.google.com/maps/dir/?api=1&destination=${vendor.latitude},${vendor.longitude}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className={cn("px-6 py-3 rounded-xl font-bold text-sm transition-colors", isDarkMode ? "bg-white text-black hover:bg-gray-200" : "bg-black text-white hover:bg-gray-800")}
+                                            >
+                                                Get Directions ↗
+                                            </a>
+                                        </div>
+                                    </div>
+                                </section>
+                            )}
+
+                            {/* SERVICES (Compact List Layout) */}
                             <section id="services" ref={servicesRef} className="scroll-mt-32">
-                                <h2 className={cn("text-3xl font-bold mb-8", isDarkMode ? "text-white" : "text-gray-900")}>Services</h2>
+                                <h2 className={cn("text-3xl font-bold mb-6", isDarkMode ? "text-white" : "text-gray-900")}>Services</h2>
 
-                                <div className="space-y-10">
+                                {/* Sticky Category Nav for Services */}
+                                <ServiceCategoryNav categories={categories} isDarkMode={isDarkMode} />
+
+                                <div className="space-y-12">
                                     {categories.map((category) => (
-                                        <div key={category}>
-                                            <h3 className="text-xl font-bold text-[rgb(var(--brand-rgb))] mb-4 flex items-center gap-2">
-                                                <span className="w-8 h-[2px] bg-[rgb(var(--brand-rgb))] opacity-50" /> {category}
+                                        <div key={category} id={category} className="scroll-mt-[180px]">
+                                            <h3 className={cn(
+                                                "text-xl font-bold mb-4 flex items-center gap-2",
+                                                isDarkMode ? "text-white" : "text-gray-900"
+                                            )}>
+                                                {category}
                                             </h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                {vendor.services.filter(s => s.category === category).map((service) => {
-                                                    const isSelected = cart.some(s => s.id === service.id);
-                                                    return (
-                                                        <motion.div
-                                                            key={service.id}
-                                                            whileHover={{ y: -5 }}
-                                                            className={cn(
-                                                                "group relative p-5 rounded-3xl border transition-all duration-300 cursor-pointer overflow-hidden select-none",
-                                                                isSelected
-                                                                    ? "bg-[rgb(var(--brand-rgb))]/10 border-[rgb(var(--brand-rgb))]/50 shadow-lg shadow-[rgb(var(--brand-rgb))]/10"
-                                                                    : (isDarkMode ? "bg-white/5 border-white/5 hover:border-white/10 hover:bg-white/10" : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-xl")
-                                                            )}
-                                                            onClick={(e) => toggleService(service, e)}
-                                                        >
-                                                            {/* Selected Indicator */}
-                                                            {isSelected && (
-                                                                <div className="absolute top-4 right-4 text-[rgb(var(--brand-rgb))]">
-                                                                    <CheckCircle2 className="w-6 h-6 fill-[rgb(var(--brand-rgb))]/20" />
-                                                                </div>
-                                                            )}
-
-                                                            <h4 className={cn("font-bold text-lg mb-1 pr-8", isSelected ? "text-[rgb(var(--brand-rgb))]" : (isDarkMode ? "text-white" : "text-gray-900"))}>{service.name}</h4>
-                                                            <div className="flex items-center gap-3 text-xs font-medium text-gray-400 mb-3">
-                                                                <span className={cn("px-2 py-1 rounded-md", isDarkMode ? "bg-white/5" : "bg-gray-100")}>{service.duration} mins</span>
-                                                                {service.description && <span className="truncate max-w-[120px]">{service.description}</span>}
-                                                            </div>
-
-                                                            <div className="flex items-end justify-between mt-auto">
-                                                                <div className={cn("text-xl font-bold", isDarkMode ? "text-white" : "text-gray-900")}>₹{service.price}</div>
-                                                                <button
-                                                                    type="button"
-                                                                    className={cn(
-                                                                        "px-4 py-2 rounded-xl text-xs font-bold transition-colors z-20 relative",
-                                                                        !vendor.isBookingEnabled ? "opacity-50 cursor-not-allowed bg-gray-100 text-gray-400" :
-                                                                            isSelected
-                                                                                ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                                                                                : "bg-gray-100 text-gray-900 group-hover:bg-[rgb(var(--brand-rgb))] group-hover:text-white"
-                                                                    )}
-                                                                    disabled={!vendor.isBookingEnabled}
-                                                                    onClick={(e) => toggleService(service, e)}
-                                                                >
-                                                                    {isSelected ? "Remove" : (!vendor.isBookingEnabled ? "Closed" : "Add")}
-                                                                </button>
-                                                            </div>
-                                                        </motion.div>
-                                                    );
-                                                })}
+                                            <div className="flex flex-col">
+                                                {vendor.services.filter(s => s.category === category).map((service) => (
+                                                    <CompactServiceItem
+                                                        key={service.id}
+                                                        service={service}
+                                                        isSelected={cart.some(s => s.id === service.id)}
+                                                        isBookingEnabled={vendor.isBookingEnabled}
+                                                        isDarkMode={isDarkMode}
+                                                        onToggle={toggleService}
+                                                        brandColor={brandColor}
+                                                    />
+                                                ))}
                                             </div>
                                         </div>
                                     ))}

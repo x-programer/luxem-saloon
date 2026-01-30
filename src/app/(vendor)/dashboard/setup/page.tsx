@@ -128,7 +128,7 @@ export default function VendorSetupPage() {
                                 <input
                                     {...register("salonName", { required: true })}
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-gray-50 focus:bg-white transition-all"
-                                    placeholder="e.g. Luxe Studio"
+                                    placeholder="e.g. Saloon Studio"
                                 />
                                 {errors.salonName && <span className="text-red-500 text-xs mt-1">Required</span>}
                             </div>

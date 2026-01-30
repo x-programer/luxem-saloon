@@ -129,7 +129,7 @@ export function Navbar() {
             transition={{ duration: 0.5, ease: "easeOut" }}
             className={cn(
                 "fixed top-4 inset-x-0 mx-auto z-50 max-w-5xl rounded-full transition-all duration-300",
-                "bg-white/80 backdrop-blur-2xl border border-white/60 shadow-xl shadow-black/5 ring-1 ring-white/50",
+                "bg-white/80 backdrop-blur-2xl border border-white/60 shadow-xl shadow-black/5 ring-1 ring-white/50 dark:bg-slate-900/80 dark:border-white/10",
                 scrolled && "bg-white/95 shadow-2xl shadow-purple-500/10 scale-[1.01] border-white/80"
             )}
         >
@@ -139,10 +139,10 @@ export function Navbar() {
                     {/* Logo */}
                     <Link href="/" className="flex items-center gap-2 group relative z-50">
                         <div className="w-9 h-9 bg-gradient-to-br from-primary to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg group-hover:shadow-primary/30 group-hover:scale-105 transition-all duration-300">
-                            L
+                            S
                         </div>
-                        <span className="font-bold text-xl tracking-tight text-slate-900 group-hover:text-primary transition-colors">
-                            Luxe<span className="text-slate-400 font-normal">Salon</span>
+                        <span className="font-bold text-xl tracking-tight text-slate-900 dark:text-white group-hover:text-primary transition-colors">
+                            Saloon<span className="text-slate-400 font-normal">Book</span>
                         </span>
                     </Link>
 
@@ -153,7 +153,7 @@ export function Navbar() {
                         {!isVendor && (
                             <Link
                                 href="/signup"
-                                className="text-sm font-semibold text-slate-600 hover:text-primary transition-colors flex items-center gap-2 group"
+                                className="text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-primary transition-colors flex items-center gap-2 group"
                             >
                                 <Sparkles className="w-4 h-4 text-purple-400 group-hover:text-primary transition-colors" />
                                 For Business
@@ -176,7 +176,7 @@ export function Navbar() {
                                             <NotificationBell />
                                             <div className="text-right hidden lg:block">
                                                 <p className="text-xs font-bold text-slate-900 leading-tight">
-                                                    {userProfile?.businessName || userProfile?.name || "Luxe Vendor"}
+                                                    {userProfile?.businessName || userProfile?.name || "Saloon Book Vendor"}
                                                 </p>
                                                 <p className="text-[9px] font-bold text-primary uppercase tracking-wide">Vendor Dashboard</p>
                                             </div>
@@ -266,7 +266,7 @@ export function Navbar() {
                                 >
                                     <button
                                         className={cn(
-                                            "px-5 py-2 bg-slate-900 text-white text-sm font-bold rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2",
+                                            "px-5 py-2 bg-slate-900 text-white text-sm font-bold rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 dark:bg-white dark:text-slate-900",
                                             isSignInOpen && "bg-primary shadow-primary/30"
                                         )}
                                     >

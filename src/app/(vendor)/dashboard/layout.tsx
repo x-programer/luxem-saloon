@@ -7,8 +7,9 @@ import { useAuth } from "@/lib/auth-context";
 import {
     LayoutDashboard, Scissors, Calendar, Users, ShoppingBag,
     Star, Image as ImageIcon, Briefcase, AlertTriangle, X, LogOut, Search,
-    Store, Menu, Settings
+    Store, Menu, Settings, HelpCircle
 } from "lucide-react";
+import { SupportModal } from "@/components/vendor/SupportModal";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { motion, AnimatePresence } from "framer-motion";
@@ -75,10 +76,12 @@ export default function VendorDashboardLayout({ children }: { children: React.Re
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
-    const impersonateId = searchParams.get('impersonate');
+    // Capture either parameter
+    const impersonateId = searchParams.get('impersonate') || searchParams.get('viewAs');
 
     // Layout State
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isSupportOpen, setIsSupportOpen] = useState(false);
 
     // Data State
     const [viewedUser, setViewedUser] = useState<any>(null);
@@ -135,9 +138,10 @@ export default function VendorDashboardLayout({ children }: { children: React.Re
     };
 
     // Helper to construct links with impersonation param
+    // Standardize all internal navigation to use 'viewAs'
     const getLink = (path: string) => {
         const base = `/dashboard${path}`;
-        return impersonateId ? `${base}?impersonate=${impersonateId}` : base;
+        return impersonateId ? `${base}?viewAs=${impersonateId}` : base;
     };
 
     // Helper to check active state
@@ -160,6 +164,8 @@ export default function VendorDashboardLayout({ children }: { children: React.Re
             className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900 relative selection:bg-brand/20 selection:text-brand"
             style={brandStyles}
         >
+            <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} user={user} />
+
             {/* 1. Subtle Background Gradients */}
             <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
                 <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-brand/5 rounded-full blur-[120px] mix-blend-multiply opacity-70 animate-pulse" />
@@ -192,6 +198,7 @@ export default function VendorDashboardLayout({ children }: { children: React.Re
                         isActive={isActive}
                         closeMenu={() => setIsMobileMenuOpen(false)}
                         isMobile={false}
+                        onSupportClick={() => setIsSupportOpen(true)}
                     />
                 </div>
             </aside>
@@ -214,6 +221,7 @@ export default function VendorDashboardLayout({ children }: { children: React.Re
                             isActive={isActive}
                             closeMenu={() => setIsMobileMenuOpen(false)}
                             isMobile={true}
+                            onSupportClick={() => setIsSupportOpen(true)}
                         />
                     </motion.aside>
                 )}
@@ -285,7 +293,7 @@ export default function VendorDashboardLayout({ children }: { children: React.Re
 }
 
 // Extracted for reusability between Desktop (Static) and Mobile (Animated) sidebars
-const SidebarContent = ({ viewedUser, isImpersonating, handleLogout, getLink, isActive, closeMenu, isMobile }: any) => {
+const SidebarContent = ({ viewedUser, isImpersonating, handleLogout, getLink, isActive, closeMenu, isMobile, onSupportClick }: any) => {
     return (
         <>
             {/* Logo Area */}
@@ -295,7 +303,7 @@ const SidebarContent = ({ viewedUser, isImpersonating, handleLogout, getLink, is
                         L
                     </div>
                     <div className="flex flex-col justify-center">
-                        <span className="font-bold text-slate-900 text-lg tracking-tight leading-none">Luxe</span>
+                        <span className="font-bold text-slate-900 text-lg tracking-tight leading-none">Saloon</span>
                         <span className="text-slate-400 text-xs font-medium tracking-widest uppercase">Salon</span>
                     </div>
                 </div>
@@ -340,6 +348,7 @@ const SidebarContent = ({ viewedUser, isImpersonating, handleLogout, getLink, is
                 <SidebarItem icon={Star} label="Reviews" href={getLink('/reviews')} isActive={isActive('/reviews')} onClick={closeMenu} />
                 <SidebarItem icon={ImageIcon} label="Gallery" href={getLink('/gallery')} isActive={isActive('/gallery')} onClick={closeMenu} />
                 <SidebarItem icon={Settings} label="Settings" href={getLink('/settings')} isActive={isActive('/settings')} onClick={closeMenu} />
+                <SidebarItem icon={HelpCircle} label="Help & Support" href={getLink('/support')} isActive={isActive('/support')} onClick={closeMenu} />
             </div>
 
             {/* Profile */}

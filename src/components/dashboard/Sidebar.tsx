@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { LayoutDashboard, Images, Settings, Scissors, CalendarCheck2, ChevronLeft, ChevronRight, ExternalLink, LogOut, Users, Star, ShoppingBag } from "lucide-react";
@@ -11,6 +11,8 @@ import { auth, db } from "@/lib/firebase/config";
 import { signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { toast } from "sonner";
+import { HelpCircle } from "lucide-react";
+import { SupportModal } from "@/components/vendor/SupportModal";
 
 const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -33,6 +35,9 @@ interface SidebarNavContentProps {
     handleLogout: () => void;
     pathname: string;
     router: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    viewAsId?: string | null;
+    onSettingsClick?: () => void;
+    onSupportClick?: () => void;
 }
 
 const SidebarNavContent = ({
@@ -43,7 +48,10 @@ const SidebarNavContent = ({
     user,
     handleLogout,
     pathname,
-    router
+    router,
+    viewAsId,
+    onSettingsClick,
+    onSupportClick
 }: SidebarNavContentProps) => (
     <>
         <div className="flex items-center justify-center h-20 border-b border-gray-100 overflow-hidden relative shrink-0">
@@ -66,7 +74,7 @@ const SidebarNavContent = ({
                         exit={{ opacity: 0, y: -10 }}
                         className="flex items-center gap-2"
                     >
-                        <h1 className="text-xl font-bold tracking-wider text-gray-900 font-serif">LUXE SALON</h1>
+                        <h1 className="text-xl font-bold tracking-wider text-gray-900 font-serif">SALOON BOOK</h1>
                         {mobile && onMobileClose && (
                             <button
                                 onClick={onMobileClose}
@@ -123,7 +131,7 @@ const SidebarNavContent = ({
                     return (
                         <Link
                             key={item.name}
-                            href={item.href}
+                            href={viewAsId ? `${item.href}?viewAs=${viewAsId}` : item.href}
                             onClick={mobile && onMobileClose ? onMobileClose : undefined}
                             className={cn(
                                 "flex items-center px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 group relative overflow-hidden",
@@ -169,6 +177,33 @@ const SidebarNavContent = ({
             {/* BOTTOM ACTIONS */}
             <div className="px-3 pb-4 space-y-2">
                 <button
+                    onClick={onSupportClick}
+                    className={cn(
+                        "w-full flex items-center px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 group relative overflow-hidden text-blue-600 hover:bg-blue-50",
+                    )}
+                >
+                    <div className="flex items-center justify-center min-w-[24px]">
+                        <HelpCircle
+                            className="h-5 w-5 transition-colors"
+                            aria-hidden="true"
+                        />
+                    </div>
+
+                    <motion.span
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{
+                            opacity: (isCollapsed && !mobile) ? 0 : 1,
+                            width: (isCollapsed && !mobile) ? 0 : "auto",
+                            display: (isCollapsed && !mobile) ? "none" : "block"
+                        }}
+                        transition={{ duration: 0.2 }}
+                        className="ml-3 whitespace-nowrap overflow-hidden"
+                    >
+                        Help & Support
+                    </motion.span>
+                </button>
+
+                <button
                     onClick={handleLogout}
                     className={cn(
                         "w-full flex items-center px-3 py-3 text-sm font-medium rounded-xl transition-all duration-200 group relative overflow-hidden text-red-500 hover:bg-red-50",
@@ -198,7 +233,7 @@ const SidebarNavContent = ({
                 <div className="p-4 border-t border-gray-100 shrink-0">
                     <div className={cn("flex items-center", (isCollapsed && !mobile) ? "justify-center" : "")}>
                         <div className="relative">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-luxe-primary to-luxe-secondary flex items-center justify-center text-white font-bold shadow-md cursor-pointer" onClick={() => router.push('/dashboard/settings')}>
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-luxe-primary to-luxe-secondary flex items-center justify-center text-white font-bold shadow-md cursor-pointer" onClick={onSettingsClick}>
                                 {user?.email?.[0].toUpperCase() || "V"}
                             </div>
                             <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
@@ -211,7 +246,7 @@ const SidebarNavContent = ({
                                 className="ml-3 overflow-hidden"
                             >
                                 <p className="text-sm font-semibold text-gray-800 truncate max-w-[120px]">{user?.email?.split('@')[0] || "Vendor"}</p>
-                                <p onClick={() => router.push('/dashboard/settings')} className="text-xs text-gray-500 hover:text-luxe-primary cursor-pointer transition-colors">View Settings</p>
+                                <p onClick={onSettingsClick} className="text-xs text-gray-500 hover:text-luxe-primary cursor-pointer transition-colors">View Settings</p>
                             </motion.div>
                         )}
                     </div>
@@ -224,9 +259,13 @@ const SidebarNavContent = ({
 export function Sidebar({ className, isMobileOpen, onMobileClose }: { className?: string, isMobileOpen?: boolean, onMobileClose?: () => void }) {
     const pathname = usePathname();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    // Support both 'viewAs' (internal) and 'impersonate' (from legacy/admin links)
+    const viewAsId = searchParams.get('viewAs') || searchParams.get('impersonate');
     const { user } = useAuth();
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [slug, setSlug] = useState<string | null>(null);
+    const [isSupportOpen, setIsSupportOpen] = useState(false);
 
     // Sidebar Integration API Calls
     useEffect(() => {
@@ -252,22 +291,23 @@ export function Sidebar({ className, isMobileOpen, onMobileClose }: { className?
 
     useEffect(() => {
         const fetchSlug = async () => {
-            if (!user) return;
+            const targetId = viewAsId || user?.uid;
+            if (!targetId) return;
             try {
-                const docRef = doc(db, 'users', user.uid);
+                const docRef = doc(db, 'users', targetId);
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists() && docSnap.data().slug) {
                     setSlug(docSnap.data().slug);
                 } else if (docSnap.exists()) {
                     // Fallback to uid if no slug set
-                    setSlug(user.uid);
+                    setSlug(targetId);
                 }
             } catch (error) {
                 console.error("Error fetching slug", error);
             }
         };
         fetchSlug();
-    }, [user]);
+    }, [user, viewAsId]);
 
 
     const handleLogout = async () => {
@@ -281,8 +321,19 @@ export function Sidebar({ className, isMobileOpen, onMobileClose }: { className?
         }
     };
 
+    const handleSettingsClick = () => {
+        const url = viewAsId ? `/dashboard/settings?viewAs=${viewAsId}` : '/dashboard/settings';
+        router.push(url);
+    };
+
     return (
         <>
+            <SupportModal
+                isOpen={isSupportOpen}
+                onClose={() => setIsSupportOpen(false)}
+                user={user}
+            />
+
             {/* Mobile Overlay Sidebar */}
             <AnimatePresence>
                 {isMobileOpen && (
@@ -310,6 +361,9 @@ export function Sidebar({ className, isMobileOpen, onMobileClose }: { className?
                                 handleLogout={handleLogout}
                                 pathname={pathname}
                                 router={router}
+                                viewAsId={viewAsId}
+                                onSettingsClick={handleSettingsClick}
+                                onSupportClick={() => setIsSupportOpen(true)}
                             />
                         </motion.div>
                     </>
@@ -339,6 +393,9 @@ export function Sidebar({ className, isMobileOpen, onMobileClose }: { className?
                     handleLogout={handleLogout}
                     pathname={pathname}
                     router={router}
+                    viewAsId={viewAsId}
+                    onSettingsClick={handleSettingsClick}
+                    onSupportClick={() => setIsSupportOpen(true)}
                 />
             </motion.div>
         </>

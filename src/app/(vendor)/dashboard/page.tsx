@@ -42,7 +42,7 @@ export default function VendorDashboardPage() {
     const { user, role, loading } = useAuth();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const impersonateId = searchParams.get('impersonate');
+    const impersonateId = searchParams.get('impersonate') || searchParams.get('viewAs');
 
     // Data State
     const [viewedUser, setViewedUser] = useState<any>(null);
@@ -94,7 +94,8 @@ export default function VendorDashboardPage() {
                 const bookings = bookingsSnap.docs.map(d => d.data());
 
                 // Debugging Log as needed
-                console.log("Raw Appointments:", bookings);
+                // Debugging Log as needed
+
 
                 // Helper for Safe Date Parsing (Handles Firestore Timestamps & Strings)
                 const safeDate = (value: any) => {
@@ -315,7 +316,7 @@ export default function VendorDashboardPage() {
                             <p className="text-slate-500 text-sm">Income trend over time</p>
                         </div>
                     </div>
-                    <div className="h-[300px] w-full">
+                    <div className="h-[350px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={dashboardStats.chartData}>
                                 <defs>
