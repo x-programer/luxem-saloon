@@ -16,7 +16,7 @@ export function Hero() {
                     initial={{ opacity: 0, y: 40 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.8, ease: "easeOut" }}
-                    className="relative bg-white/80 backdrop-blur-xl border border-white/20 shadow-[0_20px_50px_rgba(8,_112,_184,_0.05)] rounded-[3rem] p-8 md:p-12 lg:p-16 overflow-hidden max-w-6xl mx-auto dark:bg-slate-900/60 dark:backdrop-blur-xl dark:border-white/10"
+                    className="relative bg-white/95 backdrop-blur-none border border-white/20 shadow-[0_20px_50px_rgba(8,_112,_184,_0.05)] rounded-[3rem] p-8 md:p-12 lg:p-16 overflow-hidden max-w-6xl mx-auto md:bg-white/80 md:backdrop-blur-xl dark:bg-slate-900/95 dark:backdrop-blur-none dark:border-white/10 dark:md:bg-slate-900/60 dark:md:backdrop-blur-xl"
                 >
                     {/* Glass Reflection/Highlight */}
                     <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-50" />
@@ -106,7 +106,7 @@ export function Hero() {
                                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
                             >
                                 {/* Inner App Glass Card */}
-                                <div className="relative bg-white/40 backdrop-blur-3xl border border-white/50 rounded-[2.5rem] p-6 shadow-2xl ring-1 ring-white/40">
+                                <div className="relative bg-white/95 backdrop-blur-none border border-white/50 rounded-[2.5rem] p-6 shadow-2xl ring-1 ring-white/40 md:bg-white/40 md:backdrop-blur-3xl">
 
                                     {/* Header */}
                                     <div className="flex items-center justify-between mb-8 pb-6 border-b border-black/5">
