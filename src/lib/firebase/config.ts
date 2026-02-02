@@ -36,10 +36,11 @@ if (typeof window !== "undefined") {
 
 // 3. Initialize App Check (Client-Side Only)
 if (typeof window !== "undefined") {
-    // Enable debug token in development environment
+
+    // ✅ CRITICAL UPDATE: Use the specific token from .env.local
     if (process.env.NODE_ENV === 'development') {
         // @ts-ignore
-        self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+        self.FIREBASE_APPCHECK_DEBUG_TOKEN = process.env.NEXT_PUBLIC_FIREBASE_APP_CHECK_DEBUG_TOKEN;
     }
 
     // Use a variable to ensure the key exists
@@ -51,20 +52,13 @@ if (typeof window !== "undefined") {
                 provider: new ReCaptchaV3Provider(siteKey),
                 isTokenAutoRefreshEnabled: true,
             });
+            console.log("✅ App Check initialized successfully.");
         } catch (error) {
-            if (process.env.NODE_ENV === 'development') {
-                console.warn("App Check init failed (non-critical in dev):", error);
-            }
+            console.warn("❌ App Check init failed:", error);
         }
     } else {
         console.warn("⚠️ App Check skipped: NEXT_PUBLIC_RECAPTCHA_SITE_KEY is missing in .env.local");
     }
 }
-
-// Connect to Emulators if running locally (Optional, uncomment to use)
-// if (process.env.NODE_ENV === "development") {
-//    connectFunctionsEmulator(functions, "localhost", 5001);
-//    connectStorageEmulator(storage, "localhost", 9199);
-// }
 
 export { app, auth, db, functions, storage, analytics };

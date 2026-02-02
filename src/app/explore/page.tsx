@@ -1,45 +1,73 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { getAllVendors, VendorPreview } from "@/app/actions/vendors";
 import { Loader2, Search, MapPin, Star, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useDebounce } from "@/hooks/useDebounce";
 
 const FILTER_TAGS = ["Hair", "Nails", "Spa", "Makeup", "Barber", "Skin"];
 
-export default function ExplorePage() {
+// 1. Create a "Wrapper" Component to handle the Search Params safely
+function ExploreContent() {
+    const searchParams = useSearchParams();
+    // ✅ Fix 1: Initialize state FROM the URL
+    // ✅ Fix 1: Initialize state FROM the URL
+    const initialQuery = searchParams.get("q") || "";
+
     const [vendors, setVendors] = useState<VendorPreview[]>([]);
     const [loading, setLoading] = useState(true);
-
-    // Search & Filter State
-    const [searchQuery, setSearchQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useState(initialQuery);
     const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
 
+    // 1. Debounce the search query
+    const debouncedSearch = useDebounce(searchQuery, 500);
+    const router = useRouter();
+
+    // 2. Fetch Vendors when Debounced Query Changes
     useEffect(() => {
         const fetchVendors = async () => {
-            const res = await getAllVendors();
-            if (res.success && res.vendors) {
-                setVendors(res.vendors);
+            try {
+                // Sync URL without reloading
+                const params = new URLSearchParams(searchParams);
+                if (debouncedSearch) {
+                    params.set("q", debouncedSearch);
+                } else {
+                    params.delete("q");
+                }
+                router.replace(`/explore?${params.toString()}`, { scroll: false });
+
+                // Fetch from Server
+                const res = await getAllVendors(debouncedSearch);
+                if (res.success && res.vendors) {
+                    console.log("✅ Vendors fetched:", res.vendors.length);
+                    setVendors(res.vendors);
+                }
+            } catch (error) {
+                console.error("❌ Error fetching:", error);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
+
         fetchVendors();
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debouncedSearch]); // Only re-run when debounced value changes
 
-    // Filter Logic
+    // 3. Handle Input Change
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSearchQuery(e.target.value);
+        setLoading(true); // Show loader immediately while user types/waits
+    };
+
+    // 4. Client-side Tag Filtering (Server does text search, we filter tags locally for speed)
     const filteredVendors = vendors.filter(vendor => {
-        // 1. Search Query (Name or City)
-        const matchesSearch =
-            vendor.businessName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            vendor.city.toLowerCase().includes(searchQuery.toLowerCase());
-
-        // 2. Tag Filter
         const matchesTag = selectedFilter
-            ? vendor.services.some(s => s.toLowerCase().includes(selectedFilter.toLowerCase()))
+            ? vendor.services?.some(s => s.toLowerCase().includes(selectedFilter.toLowerCase()))
             : true;
-
-        return matchesSearch && matchesTag;
+        return matchesTag;
     });
 
     return (
@@ -63,7 +91,7 @@ export default function ExplorePage() {
                             type="text"
                             placeholder="Search by salon name or city..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={handleSearchChange}
                             className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/10 rounded-full text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#6F2DBD]/50 focus:bg-white/15 transition-all text-lg"
                         />
                     </div>
@@ -76,8 +104,8 @@ export default function ExplorePage() {
                     <button
                         onClick={() => setSelectedFilter(null)}
                         className={`px-6 py-2 rounded-full text-sm font-bold transition-all border ${selectedFilter === null
-                                ? "bg-white text-black border-white"
-                                : "bg-transparent text-gray-400 border-white/10 hover:border-white/30 hover:text-white"
+                            ? "bg-white text-black border-white"
+                            : "bg-transparent text-gray-400 border-white/10 hover:border-white/30 hover:text-white"
                             }`}
                     >
                         All
@@ -87,8 +115,8 @@ export default function ExplorePage() {
                             key={tag}
                             onClick={() => setSelectedFilter(tag === selectedFilter ? null : tag)}
                             className={`px-6 py-2 rounded-full text-sm font-bold transition-all border ${selectedFilter === tag
-                                    ? "bg-[#6F2DBD] text-white border-[#6F2DBD] shadow-lg shadow-purple-500/20"
-                                    : "bg-transparent text-gray-400 border-white/10 hover:border-white/30 hover:text-white"
+                                ? "bg-[#6F2DBD] text-white border-[#6F2DBD] shadow-lg shadow-purple-500/20"
+                                : "bg-transparent text-gray-400 border-white/10 hover:border-white/30 hover:text-white"
                                 }`}
                         >
                             {tag}
@@ -113,7 +141,7 @@ export default function ExplorePage() {
                                     {/* Image */}
                                     <div className="h-56 overflow-hidden relative">
                                         <img
-                                            src={vendor.coverImage}
+                                            src={vendor.coverImage || "/placeholder-salon.jpg"} // Fallback Image
                                             alt={vendor.businessName}
                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                         />
@@ -123,7 +151,7 @@ export default function ExplorePage() {
                                             <h3 className="text-xl font-bold text-white truncate">{vendor.businessName}</h3>
                                             <div className="flex items-center gap-1.5 text-gray-300 text-sm mt-1">
                                                 <MapPin className="w-3.5 h-3.5" />
-                                                <span className="truncate">{vendor.address}</span>
+                                                <span className="truncate">{vendor.address || "No address"}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -131,23 +159,17 @@ export default function ExplorePage() {
                                     {/* Content */}
                                     <div className="p-5 flex flex-col flex-1">
                                         <div className="flex flex-wrap gap-2 mb-4">
-                                            {vendor.services.slice(0, 3).map((service, i) => (
+                                            {vendor.services?.slice(0, 3).map((service, i) => (
                                                 <span key={i} className="px-2.5 py-1 bg-white/5 rounded-md text-xs font-medium text-gray-400 border border-white/5">
                                                     {service}
                                                 </span>
                                             ))}
-                                            {vendor.services.length > 3 && (
-                                                <span className="px-2.5 py-1 bg-white/5 rounded-md text-xs font-medium text-gray-500 border border-white/5">
-                                                    +{vendor.services.length - 3} more
-                                                </span>
-                                            )}
                                         </div>
 
                                         <div className="mt-auto flex items-center justify-between pt-4 border-t border-white/5">
                                             <div className="flex items-center gap-1">
                                                 <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                                                 <span className="font-bold text-white">4.9</span>
-                                                <span className="text-gray-500 text-sm">(120)</span>
                                             </div>
                                             <span className="text-[#6F2DBD] font-bold text-sm flex items-center gap-1 group-hover:gap-2 transition-all">
                                                 Book Now <ArrowRight className="w-4 h-4" />
@@ -163,10 +185,21 @@ export default function ExplorePage() {
                 {!loading && filteredVendors.length === 0 && (
                     <div className="text-center py-20">
                         <h3 className="text-xl font-bold text-white">No salons found</h3>
-                        <p className="text-gray-500 mt-2">Try adjusting your search or filters.</p>
+                        <p className="text-gray-500 mt-2">
+                            Searching for: <span className="text-[#6F2DBD] font-mono">"{searchQuery}"</span>
+                        </p>
                     </div>
                 )}
             </div>
         </div>
+    );
+}
+
+// ✅ Fix 3: Main Page MUST use Suspense (Next.js Rule for SearchParams)
+export default function ExplorePage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-black text-white flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#6F2DBD]" /></div>}>
+            <ExploreContent />
+        </Suspense>
     );
 }

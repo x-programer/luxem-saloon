@@ -1,6 +1,7 @@
 "use server";
 
 import { adminDb } from "@/lib/firebase/admin";
+import { unstable_cache } from "next/cache";
 
 export interface VendorPreview {
     id: string;
@@ -12,9 +13,7 @@ export interface VendorPreview {
     services: string[]; // Simplified list of service names or categories
 }
 
-import { unstable_cache } from "next/cache";
-
-// Internal fetch function (renamed)
+// Internal fetch function
 async function fetchAllVendors(searchQuery?: string, searchCity?: string) {
     try {
         // 1. Validation & Sanitization
@@ -25,16 +24,14 @@ async function fetchAllVendors(searchQuery?: string, searchCity?: string) {
         if (query.length > 100) query = query.substring(0, 100);
         if (cityFilter.length > 50) cityFilter = cityFilter.substring(0, 50);
 
-        // Remove dangerous characters (basic XSS prevention for search logic)
-        query = query.replace(/[<>]/g, "");
-        cityFilter = cityFilter.replace(/[<>]/g, "");
+        // Security: Remove dangerous characters (Allow only alphanumeric, spaces, ., -, and ,)
+        query = query.replace(/[^a-z0-9 .,-]/g, "");
+        cityFilter = cityFilter.replace(/[^a-z0-9 .,-]/g, "");
 
-        // 2. Fetch All Vendors (Optimized for MVP)
-        // Note: For MVP with <1000 vendors, fetching all and filtering in-memory is acceptable 
-        // and provides better search relevance than basic Firestore inequality queries.
+        // 2. Fetch All Vendors
         const snapshot = await adminDb
             .collection('users')
-            .where('role', '==', 'vendor')
+            //.where('role', '==', 'vendor') // Uncomment if you have roles set up
             .get();
 
         const vendors: VendorPreview[] = [];
@@ -47,18 +44,37 @@ async function fetchAllVendors(searchQuery?: string, searchCity?: string) {
             const servicesSnap = await adminDb.collection('services').where('uid', '==', doc.id).limit(5).get();
             const serviceNames = servicesSnap.docs.map(s => s.data().name);
 
-            // Normalize City
-            const vendorCity = (data.city || (data.address ? data.address.split(',')[1]?.trim() : "")).toLowerCase();
+            // ✅ SMART MAPPING FIX: Handle different field names for the name
+            // Database has 'displayName' (e.g. "Ruhi"), code might look for 'businessName'
+            const rawName = data.displayName || data.businessName || data.salonName || "Saloon Book";
+            const businessName = rawName.toLowerCase();
+
+            // Normalize City (Safe Fallback to prevent crash)
+            let derivedCity = data.city || "";
+            if (!derivedCity && data.address && data.address.includes(',')) {
+                derivedCity = data.address.split(',')[1]?.trim() || "";
+            }
+            const vendorCity = derivedCity.toLowerCase();
             const vendorAddress = (data.address || "").toLowerCase();
-            const businessName = (data.salonName || data.businessName || "Saloon Book").toLowerCase();
 
             // 4. Filtering Logic
             let matchesQuery = true;
             let matchesCity = true;
 
             if (query) {
-                const combinedText = `${businessName} ${serviceNames.join(" ")}`.toLowerCase();
-                matchesQuery = combinedText.includes(query);
+                // Smart Search: Check Name, City, OR Address
+                // Also check combined text for keyword matches within services
+                const combinedServices = serviceNames.join(" ").toLowerCase();
+
+                const matchesName = businessName.includes(query);
+                const matchesCitySearch = vendorCity.includes(query);
+                const matchesAddress = vendorAddress.includes(query);
+                const matchesServices = combinedServices.includes(query);
+
+                // Debug log to help you verify matches in terminal
+                // console.log(`Checking: "${businessName}" against "${query}" -> Match? ${matchesName}`);
+
+                matchesQuery = matchesName || matchesCitySearch || matchesAddress || matchesServices;
             }
 
             if (cityFilter) {
@@ -70,10 +86,10 @@ async function fetchAllVendors(searchQuery?: string, searchCity?: string) {
                 vendors.push({
                     id: doc.id,
                     slug: data.slug || doc.id,
-                    businessName: data.salonName || data.businessName || "Saloon Book",
-                    address: data.address || "",
-                    city: data.city || (data.address ? data.address.split(',')[1]?.trim() : "Unknown City"),
-                    coverImage: data.coverImage || "https://images.unsplash.com/photo-1521590832898-947c13a8ba3b?q=80&w=1200&auto=format&fit=crop",
+                    businessName: rawName, // ✅ Use the correctly mapped name
+                    address: data.address || "No address provided",
+                    city: derivedCity || "Unknown City",
+                    coverImage: data.banner || data.coverImage || "https://images.unsplash.com/photo-1521590832898-947c13a8ba3b?q=80&w=1200&auto=format&fit=crop",
                     services: serviceNames
                 });
             }
@@ -90,9 +106,9 @@ async function fetchAllVendors(searchQuery?: string, searchCity?: string) {
 // 🚀 Cached Version (Public Export)
 export const getAllVendors = unstable_cache(
     async (searchQuery?: string, searchCity?: string) => fetchAllVendors(searchQuery, searchCity),
-    ['all-vendors-list'], // Key parts
+    ['all-vendors-list'],
     {
         tags: ['vendors'], // Cache Tag for revalidation
-        revalidate: 3600 // Revalidate every hour
+        revalidate: 60 // Revalidate every 60 seconds (Good for live debugging)
     }
 );
