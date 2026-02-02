@@ -8,6 +8,40 @@ import { motion } from "framer-motion";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useDebounce } from "@/hooks/useDebounce";
 
+import { Skeleton } from "@/components/ui/Skeleton";
+
+// Skeleton Loader Component matching the Vendor Card design
+function VendorCardSkeleton() {
+    return (
+        <div className="bg-[#111] border border-white/10 rounded-3xl overflow-hidden h-full flex flex-col">
+            {/* Image Placeholder */}
+            <div className="h-56 relative bg-white/5">
+                <Skeleton className="w-full h-full bg-white/5" />
+                <div className="absolute bottom-4 left-4 right-4 space-y-2">
+                    <Skeleton className="h-6 w-3/4 bg-white/10" />
+                    <Skeleton className="h-4 w-1/2 bg-white/10" />
+                </div>
+            </div>
+
+            {/* Content Placeholder */}
+            <div className="p-5 flex flex-col flex-1 space-y-4">
+                {/* Tags */}
+                <div className="flex gap-2">
+                    <Skeleton className="h-6 w-16 rounded-md bg-white/10" />
+                    <Skeleton className="h-6 w-20 rounded-md bg-white/10" />
+                    <Skeleton className="h-6 w-14 rounded-md bg-white/10" />
+                </div>
+
+                {/* Footer */}
+                <div className="mt-auto flex items-center justify-between pt-4 border-t border-white/5">
+                    <Skeleton className="h-5 w-12 bg-white/10" />
+                    <Skeleton className="h-5 w-24 bg-white/10" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
 const FILTER_TAGS = ["Hair", "Nails", "Spa", "Makeup", "Barber", "Skin"];
 
 // 1. Create a "Wrapper" Component to handle the Search Params safely
@@ -124,10 +158,12 @@ function ExploreContent() {
                     ))}
                 </div>
 
-                {/* Loading State */}
+                {/* Loading State: Skeleton Grid */}
                 {loading ? (
-                    <div className="flex justify-center py-20">
-                        <Loader2 className="w-8 h-8 text-[#6F2DBD] animate-spin" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <VendorCardSkeleton key={i} />
+                        ))}
                     </div>
                 ) : (
                     /* Grid */
