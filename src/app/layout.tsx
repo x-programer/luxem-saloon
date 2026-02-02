@@ -15,7 +15,11 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "Saloon Book - The OS for Modern Salons",
   description: "Manage bookings, showcase your portfolio, and grow your brand with a stunning profile.",
+  verification: {
+    google: "jdk3y9z2VE8o0AfE_oEqdtTS1kg43F0NY7v279tZsJQ",
+  },
 };
+
 
 export default function RootLayout({
   children,
